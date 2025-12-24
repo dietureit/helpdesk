@@ -1,6 +1,6 @@
 <template>
   <div>
-    <LayoutHeader>
+    <!-- <LayoutHeader>
       <template #left-header>
         <ViewBreadcrumbs
           label="Tickets"
@@ -11,7 +11,7 @@
         />
       </template>
       <template #right-header>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2"> -->
           <!--
           <div
             class="flex items-center gap-1 rounded-lg border border-outline-gray-2 bg-surface-white p-1"
@@ -46,7 +46,7 @@
             </Button>
           </div>
           -->
-          <RouterLink
+          <!-- <RouterLink
             :to="{ name: isCustomerPortal ? 'TicketNew' : 'TicketAgentNew' }"
           >
             <Button label="Create" theme="gray" variant="solid">
@@ -57,7 +57,7 @@
           </RouterLink>
         </div>
       </template>
-    </LayoutHeader>
+    </LayoutHeader> -->
     <!--
     <div v-show="isTableView">
       <TicketListViewSection
@@ -82,6 +82,9 @@
       :team-filter-options="teamFilterOptions"
       :agent-filter-options="effectiveAgentFilterOptions"
       :filters="cardFilters"
+      :created-at="cardDateFilters.createdAt"
+      :resolved-at="cardDateFilters.resolvedAt"
+      :search="cardSearch"
       :quick-views="quickViews"
       :active-quick-view="activeQuickView"
       @row-click="handleCardClick"
@@ -91,7 +94,11 @@
       @prev-page="handleCardPrevPage"
       @load-more="handleCardLoadMore"
       @update:filters="updateCardFilters"
+      @update:created-at="(value) => updateCardDateFilter('createdAt', value)"
+      @update:resolved-at="(value) => updateCardDateFilter('resolvedAt', value)"
+      @update:search="handleCardSearchUpdate"
       @apply-filters="applyCardFilters"
+      @apply-date-filters="applyCardDateFilters"
       @reset-filters="resetCardFilters"
       @apply-quick-view="applyQuickView"
       @update-limit="handleUpdateLimit"
@@ -134,6 +141,7 @@ import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { View } from "@/types";
 import { getIcon, isCustomerPortal } from "@/utils";
 import { Badge, FeatherIcon, toast, Tooltip, usePageMeta, Dropdown, call, createResource } from "frappe-ui";
+import { useDebounceFn } from "@vueuse/core";
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 // import { useStorage } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
@@ -152,6 +160,11 @@ type CardFilters = {
   priority: any[];
   team: any[];
   agent: any[];
+};
+
+type CardDateFilters = {
+  createdAt: string;
+  resolvedAt: string;
 };
 
 const router = useRouter();
@@ -228,6 +241,14 @@ const cardFilters = reactive<CardFilters>({
   team: [],
   agent: [],
 });
+const cardDateFilters = reactive<CardDateFilters>({
+  createdAt: "",
+  resolvedAt: "",
+});
+const cardSearch = ref("");
+const applySearchDebounced = useDebounceFn(() => {
+  applyCardFilters(cardFilters);
+}, 400);
 const activeQuickView = ref<string>("");
 const showExportModal = ref(false);
 const authStore = useAuthStore();
@@ -900,6 +921,52 @@ function updateCardFilters(value: CardFilters) {
   cardFilters.agent = value?.agent || [];
 }
 
+function updateCardDateFilter(key: keyof CardDateFilters, value: string) {
+  cardDateFilters[key] = value || "";
+}
+
+function applyCardDateFilters() {
+  applyCardFilters(cardFilters);
+}
+
+function getDateRange(option: string): [string, string] | null {
+  if (!option) return null;
+  const format = (value: ReturnType<typeof dayjs>) =>
+    value.format("YYYY-MM-DD HH:mm:ss");
+
+  if (option === "today") {
+    const today = dayjs();
+    return [format(today.startOf("day")), format(today.endOf("day"))];
+  }
+  if (option === "yesterday") {
+    const yesterday = dayjs().subtract(1, "day");
+    return [format(yesterday.startOf("day")), format(yesterday.endOf("day"))];
+  }
+  if (option === "this_week") {
+    const start = dayjs().startOf("week");
+    const end = dayjs().endOf("day");
+    return [format(start), format(end)];
+  }
+  if (option === "this_month") {
+    const start = dayjs().startOf("month");
+    const end = dayjs().endOf("day");
+    return [format(start), format(end)];
+  }
+  return null;
+}
+
+function applyCardDateRangeFilters(filters: Record<string, any>) {
+  const createdRange = getDateRange(cardDateFilters.createdAt);
+  if (createdRange) {
+    filters.creation = ["between", createdRange];
+  }
+
+  const resolvedRange = getDateRange(cardDateFilters.resolvedAt);
+  if (resolvedRange) {
+    filters.resolution_date = ["between", resolvedRange];
+  }
+}
+
 function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string, any> {
   const sourceFilters = filtersArg || cardFilters;
   let filters: Record<string, any> = {};
@@ -917,7 +984,20 @@ function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string,
     (v) => v === "" || v === null || v === undefined
   );
 
-  if (!statusAllSelected && sourceFilters.status?.length) {
+  const overdueSelected = rawStatusValues.includes("Overdue");
+
+  if (overdueSelected) {
+    const openStatuses = (statuses.data || [])
+      .filter((status) => status.category === "Open")
+      .map((status) => status.label_agent)
+      .filter(Boolean);
+    const statusValues = openStatuses.length ? openStatuses : ["Open"];
+    filters["status"] = ["in", statusValues];
+    filters["resolution_by"] = [
+      "<",
+      dayjs().startOf("day").format("YYYY-MM-DD HH:mm:ss"),
+    ];
+  } else if (!statusAllSelected && sourceFilters.status?.length) {
     const statusValues = rawStatusValues.filter(Boolean);
     if (statusValues.length) {
       filters["status"] = ["in", statusValues];
@@ -945,9 +1025,17 @@ function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string,
   return filters;
 }
 
+function applyCardSearchFilter(filters: Record<string, any>) {
+  const searchText = cardSearch.value.trim();
+  if (searchText) {
+    filters.search = searchText;
+  }
+}
+
 function loadCardViewTickets() {
   console.log("loadCardViewTickets called");
   const filters = buildCardFilters(cardFilters);
+  applyCardDateRangeFilters(filters);
   
   // Merge with route query filters (for date, owner, agent, team, etc.)
   if (route.query.filters) {
@@ -992,6 +1080,8 @@ function loadCardViewTickets() {
       console.error("Error merging route filters:", error);
     }
   }
+
+  applyCardSearchFilter(filters);
   
   console.log("Loading card view tickets with filters:", filters);
   
@@ -1028,6 +1118,7 @@ function applyCardFilters(filtersArg: CardFilters = cardFilters) {
     const list = listViewRef.value.list;
 
     const filters = buildCardFilters(sourceFilters);
+    applyCardDateRangeFilters(filters);
     
     // Preserve route filters (date, owner, agent, team) when applying card filters
     if (route.query.filters) {
@@ -1078,12 +1169,20 @@ function applyCardFilters(filtersArg: CardFilters = cardFilters) {
   }
 }
 
+function handleCardSearchUpdate(value: string) {
+  cardSearch.value = value;
+  applySearchDebounced();
+}
+
 function resetCardFilters() {
   // Reset to "All" filter
   cardFilters.status = [{ label: "All", value: "" }];
   cardFilters.priority = [];
   cardFilters.team = [];
   cardFilters.agent = [];
+  cardDateFilters.createdAt = "";
+  cardDateFilters.resolvedAt = "";
+  cardSearch.value = "";
   activeQuickView.value = "";
   filtersApplied.value = false; // Allow fresh filter application
   
@@ -1143,8 +1242,11 @@ function applyQuickView(view: any) {
     }
   }
 
+  applyCardDateRangeFilters(mergedFilters);
+
   if (viewMode.value === "card") {
     cardViewOffset.value = 0;
+    applyCardSearchFilter(mergedFilters);
     cardViewResource.update({
       params: {
         filters: JSON.stringify(mergedFilters),
