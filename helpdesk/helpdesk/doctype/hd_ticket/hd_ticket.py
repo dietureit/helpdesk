@@ -167,6 +167,34 @@ class HDTicket(Document):
 
     def before_insert(self):
         self.generate_key()
+        self.set_agent_group_from_ticket_type()
+
+    def set_agent_group_from_ticket_type(self):
+        """
+        Set agent_group based on ticket_type by finding a team whose name contains the ticket_type.
+        Only sets if agent_group is not already set.
+        """
+        if not self.ticket_type or self.agent_group:
+            return
+
+        # ticket_type is already set in before_validate() and is a link to HD Ticket Type
+        # Use the ticket_type name directly to search for matching teams
+        ticket_type_name = self.ticket_type
+
+        # Search for teams whose name contains the ticket_type name (case-insensitive)
+        teams = frappe.get_all(
+            "HD Team",
+            filters={"name": ["like", f"%{ticket_type_name}%"]},
+            fields=["name"],
+            limit=1,
+            order_by="name asc"
+        )
+
+        if teams:
+            self.agent_group = teams[0].name
+            frappe.logger().info(
+                f"Auto-assigned team '{self.agent_group}' to ticket based on ticket_type '{self.ticket_type}'"
+            )
 
     def after_insert(self):
         if self.ticket_split_from:
