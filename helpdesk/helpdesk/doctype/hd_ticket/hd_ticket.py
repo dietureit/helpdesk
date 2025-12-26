@@ -221,6 +221,11 @@ class HDTicket(Document):
         ):
             self.send_acknowledgement_email()
 
+        # Send notification to team members when agent_group is assigned
+        if self.agent_group and not frappe.flags.initial_sync:
+            # self.send_team_notification_email()
+            self.create_team_notifications()
+
     def on_update(self):
         # flake8: noqa
         if self.status_category == "Open":
@@ -232,6 +237,11 @@ class HDTicket(Document):
                 if agents:
                     for agent in agents:
                         self.notify_agent(agent.name, "Reaction")
+
+        # Send notification to team members when agent_group is assigned/changed
+        if self.agent_group and self.has_value_changed("agent_group"):
+            # self.send_team_notification_email()
+            self.create_team_notifications()
 
         self.remove_assignment_if_not_in_team()
         self.publish_update()
@@ -826,6 +836,179 @@ class HDTicket(Document):
             frappe.throw(
                 _("Could not send an acknowledgement email due to: {0}").format(e)
             )
+
+    def send_team_notification_email(self):
+        """
+        Send email notification and create HD Notifications for all team members when a ticket is assigned to their team.
+        - For assigned agents: Create "Assignment" notification
+        - For non-assigned team members: Create "Team Assignment" notification
+        """
+        if not self.agent_group:
+            return
+
+        # Get all team members
+        team_members = frappe.get_all(
+            "HD Team Member",
+            filters={"parent": self.agent_group},
+            fields=["user"],
+            pluck="user"
+        )
+
+        if not team_members:
+            return
+
+        # Get email addresses for team members
+        recipients = []
+        for user in team_members:
+            email = frappe.db.get_value("User", user, "email")
+            if email:
+                recipients.append(email)
+
+        if not recipients:
+            return
+
+        # Get ticket URL
+        ticket_url = frappe.utils.get_url(f"/helpdesk/tickets/{self.name}")
+
+        # Create email content
+        email_subject = f"New Ticket #{self.name} Assigned to {self.agent_group} Team"
+        
+        # Nice HTML email template
+        email_message = f"""
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #2c3e50; margin: 0; font-size: 24px;">🎫 New Ticket Assigned</h1>
+        </div>
+        
+        <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 20px; margin-bottom: 25px; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0; color: #495057; font-size: 16px; font-weight: 600;">
+                A new ticket has been created and assigned to your team: <strong style="color: #007bff;">{self.agent_group}</strong>
+            </p>
+        </div>
+
+        <div style="margin-bottom: 25px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-weight: 600; width: 140px;">Ticket ID:</td>
+                    <td style="padding: 10px 0; color: #212529;"><strong>#{self.name}</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-weight: 600;">Subject:</td>
+                    <td style="padding: 10px 0; color: #212529;">{frappe.utils.escape_html(self.subject or 'No Subject')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-weight: 600;">Priority:</td>
+                    <td style="padding: 10px 0; color: #212529;">
+                        <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; 
+                            background-color: {'#dc3545' if self.priority == 'High' else '#ffc107' if self.priority == 'Medium' else '#28a745'}; 
+                            color: {'#fff' if self.priority == 'High' else '#000' if self.priority == 'Medium' else '#fff'};">
+                            {self.priority or 'Low'}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-weight: 600;">Ticket Type:</td>
+                    <td style="padding: 10px 0; color: #212529;">{self.ticket_type or 'N/A'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-weight: 600;">Status:</td>
+                    <td style="padding: 10px 0; color: #212529;">{self.status or 'Open'}</td>
+                </tr>
+            </table>
+        </div>
+
+        {f'<div style="background-color: #e9ecef; padding: 15px; border-radius: 4px; margin-bottom: 25px;"><p style="margin: 0; color: #495057; font-size: 14px; line-height: 1.6;">{frappe.utils.escape_html(frappe.utils.strip_html(self.description or ""))[:200]}{"..." if len(self.description or "") > 200 else ""}</p></div>' if self.description else ''}
+
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="{ticket_url}" 
+               style="display: inline-block; background-color: #007bff; color: #ffffff; padding: 12px 30px; 
+                      text-decoration: none; border-radius: 5px; font-weight: 600; font-size: 16px;">
+                View Ticket →
+            </a>
+        </div>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; text-align: center;">
+            <p style="color: #6c757d; font-size: 12px; margin: 0;">
+                This is an automated notification from your Helpdesk system.
+            </p>
+        </div>
+    </div>
+</div>
+"""
+
+        try:
+            frappe.sendmail(
+                recipients=recipients,
+                subject=email_subject,
+                message=email_message,
+                reference_doctype="HD Ticket",
+                reference_name=self.name,
+                now=True,
+                expose_recipients="header",
+                email_headers={"X-Auto-Generated": "hd-team-notification"},
+            )
+            frappe.logger().info(
+                f"Team notification email sent to {len(recipients)} members of team '{self.agent_group}' for ticket {self.name}"
+            )
+        except Exception as e:
+            frappe.log_error(
+                message=f"Could not send team notification email for ticket {self.name}: {str(e)}\n{frappe.get_traceback()}",
+                title="Team Notification Email Error"
+            )
+            # Don't throw - email failure shouldn't break ticket creation
+
+    def create_team_notifications(self):
+        """
+        Create HD Notifications for all team members when a ticket is assigned to their team.
+        - For assigned agents: Create "Assignment" notification (ticket assigned to you)
+        - For non-assigned team members: Create "Team Assignment" notification (ticket created for team)
+        """
+        if not self.agent_group:
+            return
+
+        # Get all team members
+        team_members = frappe.get_all(
+            "HD Team Member",
+            filters={"parent": self.agent_group},
+            fields=["user"],
+            pluck="user"
+        )
+
+        if not team_members:
+            return
+
+        # Get assigned agents - HD Agent names are User IDs
+        assigned_agents = self.get_assigned_agents()
+        assigned_user_ids = {agent.get("name") for agent in assigned_agents} if assigned_agents else set()
+
+        # Create HD Notification for each team member
+        for user in team_members:
+            try:
+                # Determine notification type based on assignment
+                # Check if this user is assigned to the ticket
+                if user in assigned_user_ids:
+                    # Assigned agent gets "Assignment" notification (ticket assigned to you)
+                    notification_type = "Assignment"
+                else:
+                    # Non-assigned team member gets "Team Assignment" notification (ticket created for team)
+                    notification_type = "Team Assignment"
+
+                # Create HD Notification
+                frappe.get_doc(
+                    frappe._dict(
+                        doctype="HD Notification",
+                        user_from=frappe.session.user,
+                        reference_ticket=self.name,
+                        user_to=user,
+                        notification_type=notification_type,
+                    )
+                ).insert(ignore_permissions=True)
+            except Exception as e:
+                frappe.log_error(
+                    message=f"Could not create HD Notification for user {user} on ticket {self.name}: {str(e)}",
+                    title="HD Notification Creation Error"
+                )
 
     @frappe.whitelist()
     def mark_seen(self):
