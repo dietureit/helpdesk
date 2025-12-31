@@ -1,8 +1,38 @@
 import frappe
 from frappe.model.document import Document
+from frappe.utils import now_datetime, add_to_date
 
 
 class HDNotification(Document):
+    def before_insert(self):
+        """
+        Prevent duplicate Assignment notifications at doctype level.
+        This is the final safeguard even if hook-level checks are bypassed.
+        """
+        if self.notification_type == "Assignment" and self.reference_ticket:
+            # Check for duplicate assignment notification in the last 2 minutes
+            two_minutes_ago = add_to_date(now_datetime(), minutes=-2, as_string=True)
+            
+            existing = frappe.get_all(
+                "HD Notification",
+                filters={
+                    "user_from": self.user_from,
+                    "user_to": self.user_to,
+                    "reference_ticket": self.reference_ticket,
+                    "notification_type": "Assignment",
+                    "creation": [">=", two_minutes_ago],
+                    "name": ["!=", self.name],  # Exclude current doc if updating
+                },
+                limit=1,
+                pluck="name",
+            )
+            
+            if existing:
+                # Silently prevent duplicate - don't raise error to avoid breaking assignment flow
+                frappe.throw(
+                    frappe._("Duplicate assignment notification prevented"),
+                    frappe.DuplicateEntryError,
+                )
     def format_message(self):
         user_from = self.get_from()
         if self.notification_type == "Mention":
