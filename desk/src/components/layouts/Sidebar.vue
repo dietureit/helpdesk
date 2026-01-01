@@ -114,13 +114,18 @@
         :isSidebarCollapsed="!isExpanded"
         appName="helpdesk"
       />
-      <SidebarLink
-        class="my-0.5"
-        label="Log out"
-        :icon="LucideLogOut"
-        :is-expanded="isExpanded"
-        :on-click="authStore.logout"
-      />
+      <div
+        class="my-0.5 flex h-7 items-center gap-2 rounded-md px-2 text-sm text-ink-white transition-all duration-300 ease-in-out"
+        :class="isExpanded ? 'w-full' : 'w-8 justify-center'"
+      >
+        <Avatar size="md" :image="authStore.userImage" :label="displayName" />
+        <span
+          class="min-w-0 flex-1 truncate text-ink-white transition-all duration-300 ease-in-out"
+          :class="isExpanded ? 'opacity-100' : 'w-0 overflow-hidden opacity-0'"
+        >
+          {{ displayName }}
+        </span>
+      </div>
       <!-- <SidebarLink
         v-if="isOnboardingStepsCompleted && !isCustomerPortal"
         :icon="HelpIcon"
@@ -193,7 +198,7 @@ import { useNotificationStore } from "@/stores/notification";
 import { useSidebarStore } from "@/stores/sidebar";
 import { capture } from "@/telemetry";
 import { isCustomerPortal } from "@/utils";
-import { call } from "frappe-ui";
+import { Avatar, call } from "frappe-ui";
 import {
   GettingStartedBanner,
   HelpModal,
@@ -221,7 +226,6 @@ import LucideBell from "~icons/lucide/bell";
 import FileText from "~icons/lucide/file-text";
 import Globe from "~icons/lucide/globe";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
-import LucideLogOut from "~icons/lucide/log-out";
 import LucideMail from "~icons/lucide/mail";
 import MailOpen from "~icons/lucide/mail-open";
 import MessageCircle from "~icons/lucide/message-circle";
@@ -242,6 +246,16 @@ const { isExpanded, width } = storeToRefs(useSidebarStore());
 const device = useDevice();
 const telephonyStore = useTelephonyStore();
 const { isCallingEnabled } = storeToRefs(telephonyStore);
+const displayName = computed(() => {
+  return (
+    authStore.userName ||
+    authStore.userFirstName ||
+    authStore.username ||
+    authStore.userId ||
+    authStore.user ||
+    "User"
+  );
+});
 
 const showSettingsModal = ref(false);
 const showShortcutsModal = ref(false);
