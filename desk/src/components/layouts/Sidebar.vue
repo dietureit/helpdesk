@@ -127,20 +127,20 @@
           >
             <Avatar size="md" :image="authStore.userImage" :label="displayName" />
             <span
-              class="min-w-0 flex-1 truncate text-ink-white transition-all duration-300 ease-in-out"
+              class="min-w-0  truncate text-ink-white transition-all duration-300 ease-in-out"
               :class="
                 isExpanded ? 'opacity-100' : 'w-0 overflow-hidden opacity-0'
               "
             >
               {{ displayName }}
             </span>
-            <FeatherIcon
+            <!-- <FeatherIcon
               v-if="isExpanded"
               name="chevron-up"
               class="h-4 w-4 text-ink-gray-2 transition-transform"
               :class="open ? 'rotate-180' : ''"
               aria-hidden="true"
-            />
+            /> -->
           </button>
         </template>
       </Dropdown>
