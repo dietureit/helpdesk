@@ -1445,6 +1445,26 @@ def permission_query(user):
     if not is_agent(user):
         return query
 
+    teams = get_agents_team(user)
+    team_names = [t.get("team_name") for t in teams if t.get("team_name")]
+
+    # Give visibility to tickets assigned to the agent's teams, even if not directly assigned
+    if team_names:
+        team_names_sql = ", ".join(frappe.db.escape(team) for team in team_names)
+        query += f" OR (`tabHD Ticket`.agent_group in ({team_names_sql}))"
+
+        team_users = frappe.get_all(
+            "HD Team Member", filters={"parent": ["in", team_names]}, pluck="user"
+        )
+        team_user_conditions = [
+            "(JSON_SEARCH(`tabHD Ticket`._assign, 'all', {user}) IS NOT NULL)".format(
+                user=frappe.db.escape(u)
+            )
+            for u in team_users
+        ]
+        if team_user_conditions:
+            query += f" OR ({' OR '.join(team_user_conditions)})"
+
     # First, add assignment check - users should always see tickets assigned to them
     # even if the ticket belongs to another team
     query += (
@@ -1475,8 +1495,6 @@ def permission_query(user):
     show_tickets_without_team = frappe.db.get_single_value(
         "HD Settings", "do_not_restrict_tickets_without_an_agent_group"
     )
-
-    teams = get_agents_team()
 
     if show_tickets_without_team:
         query += " OR (`tabHD Ticket`.agent_group is null OR `tabHD Ticket`.agent_group = '')"

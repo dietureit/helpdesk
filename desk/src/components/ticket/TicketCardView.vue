@@ -7,6 +7,7 @@
       v-else-if="!rows.length" 
       :title="emptyTitle" 
       icon="layout-grid"
+      @empty-state-action="emit('empty-state-action')"
       class="py-20"
     />
     <div v-else class="flex flex-col gap-3">
@@ -169,6 +170,7 @@ const emit = defineEmits<{
   (e: "rowClick", ticketId: string): void;
   (e: "updateStatus", ticketId: string, value: string): void;
   (e: "updatePriority", ticketId: string, value: string): void;
+  (e: "empty-state-action"): void;
 }>();
 
 const { getStatus } = useTicketStatusStore();

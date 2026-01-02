@@ -326,6 +326,7 @@ const emit = defineEmits<{
   (e: "reset-filters"): void;
   (e: "apply-quick-view", view: QuickView): void;
   (e: "update-limit", value: number): void;
+  (e: "empty-action"): void;
   (e: "update:search", value: string): void;
   (e: "update:created-at", value: string): void;
   (e: "update:resolved-at", value: string): void;
