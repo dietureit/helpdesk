@@ -62,14 +62,15 @@
         :rows="rows"
         :loading="loading"
         :status-options="statusOptions"
-        :priority-options="priorityOptions"
-        @row-click="emit('row-click', $event)"
-        @update-status="(ticketId, value) => emit('update-status', ticketId, value)"
-        @update-priority="
-          (ticketId, value) => emit('update-priority', ticketId, value)
-        "
-      />
-    </div>
+      :priority-options="priorityOptions"
+      @row-click="emit('row-click', $event)"
+      @update-status="(ticketId, value) => emit('update-status', ticketId, value)"
+      @update-priority="
+        (ticketId, value) => emit('update-priority', ticketId, value)
+      "
+      @empty-state-action="emit('empty-action')"
+    />
+  </div>
 
     <div
       class="hidden lg:flex w-80 shrink-0 flex-col gap-5 rounded-xl border border-outline-gray-2 bg-surface-white p-5 shadow-sm h-fit sticky top-4"
@@ -280,6 +281,7 @@ const emit = defineEmits<{
   (e: "reset-filters"): void;
   (e: "apply-quick-view", view: QuickView): void;
   (e: "update-limit", value: number): void;
+  (e: "empty-action"): void;
 }>();
 
 function updateFilter(key: keyof CardFilters, value: any) {

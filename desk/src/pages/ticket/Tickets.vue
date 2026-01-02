@@ -84,6 +84,7 @@
       :filters="cardFilters"
       :quick-views="quickViews"
       :active-quick-view="activeQuickView"
+      @empty-action="handleEmptyStateAction"
       @row-click="handleCardClick"
       @update-status="handleCardStatus"
       @update-priority="handleCardPriority"

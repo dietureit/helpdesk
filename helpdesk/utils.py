@@ -174,13 +174,15 @@ def agent_only(fn):
     return wrapper
 
 
-def get_agents_team():
+def get_agents_team(user: str | None = None):
+    user = user or frappe.session.user
+
     QBTeam = frappe.qb.DocType("HD Team")
     QBTeamMember = frappe.qb.DocType("HD Team Member")
 
     teams = (
         frappe.qb.from_(QBTeamMember)
-        .where(QBTeamMember.user == frappe.session.user)
+        .where(QBTeamMember.user == user)
         .join(QBTeam)
         .on(QBTeam.name == QBTeamMember.parent)
         .select(QBTeam.team_name, QBTeam.ignore_restrictions)
