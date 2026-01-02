@@ -62,7 +62,7 @@ export const tabs = computed(() => {
     },
     {
       label: __("App Settings"),
-      condition: () => auth.isAdmin || auth.isManager,
+      condition: () => auth.isAdmin || auth.isManager || auth.isMessengerAdmin,
       items: [
         {
           label: __("General"),
@@ -74,36 +74,43 @@ export const tabs = computed(() => {
           label: __("Agents"),
           icon: markRaw(LucideUser),
           component: markRaw(Agents),
+          condition: () => auth.isAdmin || auth.isManager || auth.isMessengerAdmin,
         },
         {
           label: __("Invite Agents"),
           icon: markRaw(LucideUserPlus),
           component: markRaw(InviteAgents),
+          condition: () => auth.isAdmin || auth.isManager || auth.isMessengerAdmin,
         },
         {
           label: __("Teams"),
           icon: markRaw(LucideUsers),
           component: markRaw(TeamsConfig),
+          condition: () => auth.isAdmin || auth.isManager || auth.isMessengerAdmin,
         },
         {
           label: __("SLA Policies"),
           icon: markRaw(ShieldCheck),
           component: markRaw(Sla),
+          condition: () => auth.isAdmin || auth.isManager,
         },
         {
           label: __("Business Holidays"),
           icon: markRaw(Briefcase),
           component: markRaw(HolidayList),
+          condition: () => auth.isAdmin || auth.isManager,
         },
         {
           label: __("Assignment Rules"),
           icon: markRaw(h(Settings, { class: "rotate-90" })),
           component: markRaw(AssignmentRules),
+          condition: () => auth.isAdmin || auth.isManager,
         },
         {
           label: __("Field Dependencies"),
           icon: markRaw(FieldDependencyIcon),
           component: markRaw(FieldDependencyConfig),
+          condition: () => auth.isAdmin || auth.isManager,
         },
       ],
     },
@@ -114,6 +121,7 @@ export const tabs = computed(() => {
           label: __("Telephony"),
           icon: markRaw(PhoneIcon),
           component: markRaw(Telephony),
+          condition: () => auth.isAdmin || auth.isManager,
         },
       ],
     },

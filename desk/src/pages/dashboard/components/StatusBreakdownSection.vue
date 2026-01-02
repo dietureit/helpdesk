@@ -47,17 +47,25 @@ const chartConfig = computed(() => {
     return null;
   }
 
+  const statusColors = {
+    Open: "#318AD8", // blue
+    Resolved: "#48BB78", // green
+    Overdue: "#F56565", // red
+  };
+
+  const data = [
+    { label: "Open", value: props.breakdown.open, color: statusColors.Open },
+    { label: "Resolved", value: props.breakdown.resolved, color: statusColors.Resolved },
+    { label: "Overdue", value: props.breakdown.overdue, color: statusColors.Overdue },
+  ];
+
   return {
     title: "",
     subtitle: "",
-    data: [
-      { label: "Open", value: props.breakdown.open },
-      { label: "Resolved", value: props.breakdown.resolved },
-      { label: "Overdue", value: props.breakdown.overdue },
-    ],
+    data,
     categoryColumn: "label",
     valueColumn: "value",
-    colors: ["#318AD8", "#48BB78", "#F56565"],
+    colors: data.map((d) => d.color),
     showInlineLabels: false,
   };
 });

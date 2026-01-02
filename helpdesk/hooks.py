@@ -50,8 +50,10 @@ website_route_rules = [
 user_invitation = {
     "allowed_roles": {
         "Agent Manager": ["Agent", "Agent Manager"],
+        "Messenger Admin":["Agent","Agent Manager"],
         "System Manager": ["Agent", "Agent Manager", "System Manager"],
     },
+    "before_insert": "helpdesk.helpdesk.hooks.user_invitation.before_insert",
     "after_accept": "helpdesk.helpdesk.hooks.user_invitation.after_accept",
 }
 

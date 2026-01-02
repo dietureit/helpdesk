@@ -194,7 +194,8 @@ def update_agent_role_permissions():
 
 
 def add_agent_manager_permissions():
-    if not frappe.db.exists("Role", "Agent Manager"):
+    roles_to_update = [r for r in ["Agent Manager", "Messenger Admin"] if frappe.db.exists("Role", r)]
+    if not roles_to_update:
         return
     doc_to_permissions = {
         "Email Account": ["create", "delete", "write"],
@@ -205,10 +206,11 @@ def add_agent_manager_permissions():
         "Role": [],
     }
     for dt in doc_to_permissions.keys():
-        # this adds read permission to the role
-        add_permission(dt, "Agent Manager")
-        for p in doc_to_permissions[dt]:
-            update_permission_property(dt, "Agent Manager", 0, p, 1)
+        for role in roles_to_update:
+            # this adds read permission to the role
+            add_permission(dt, role)
+            for p in doc_to_permissions[dt]:
+                update_permission_property(dt, role, 0, p, 1)
 
 
 def add_website_settings_permission():

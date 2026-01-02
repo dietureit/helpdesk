@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-1">
+  <div class="flex-1 min-h-[70vh]">
     <div v-if="loading" class="flex items-center justify-center py-20">
       <LoadingIndicator :scale="10" />
     </div>

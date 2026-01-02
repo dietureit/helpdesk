@@ -27,6 +27,9 @@ export const useAuthStore = defineStore("auth", () => {
     () => user__.value.has_desk_access
   );
   const isAdmin: ComputedRef<boolean> = computed(() => user__.value.is_admin);
+  const isMessengerAdmin: ComputedRef<boolean> = computed(
+    () => user__.value.is_messenger_admin
+  );
   const isAgent: ComputedRef<boolean> = computed(() => user__.value.is_agent);
   const isManager: ComputedRef<boolean> = computed(
     () => user__.value.is_manager
@@ -79,6 +82,7 @@ export const useAuthStore = defineStore("auth", () => {
     isAdmin,
     isAgent,
     isManager,
+    isMessengerAdmin,
     isLoggedIn,
     login,
     reloadUser,

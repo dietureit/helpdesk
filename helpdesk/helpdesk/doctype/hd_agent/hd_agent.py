@@ -52,6 +52,11 @@ def update_agent_role(user, new_role):
         user_doc.append_roles("Agent")
         if "Agent Manager" in frappe.get_roles(user_doc.name):
             user_doc.remove_roles("Agent Manager", "System Manager")
+        if "Messenger Admin" in frappe.get_roles(user_doc.name):
+            user_doc.remove_roles("Messenger Admin")
+    if new_role == "Messenger Admin":
+        user_doc.append_roles("Messenger Admin", "Agent")
+        # keep Agent role for permissions; do not auto-add System Manager
 
     user_doc.save()
 

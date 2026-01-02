@@ -78,14 +78,15 @@
           :rows="rows"
           :loading="loading"
           :status-options="statusOptions"
-          :priority-options="priorityOptions"
-          @row-click="emit('row-click', $event)"
-          @update-status="(ticketId, value) => emit('update-status', ticketId, value)"
-          @update-priority="
-            (ticketId, value) => emit('update-priority', ticketId, value)
-          "
-        />
-      </div>
+      :priority-options="priorityOptions"
+      @row-click="emit('row-click', $event)"
+      @update-status="(ticketId, value) => emit('update-status', ticketId, value)"
+      @update-priority="
+        (ticketId, value) => emit('update-priority', ticketId, value)
+      "
+      @empty-state-action="emit('empty-action')"
+    />
+  </div>
     </div>
 
     <div
@@ -168,6 +169,19 @@
 
         <div class="space-y-1.5">
           <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
+            Owner
+          </label>
+          <SearchMultiSelect
+            :options="ownerFilterOptions"
+            :model-value="selectedOwnerArray"
+            placeholder="Select owner"
+            selection-text="owners"
+            @update:modelValue="handleOwnerSelect"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
             Agents
           </label>
           <div class="relative">
@@ -236,6 +250,7 @@
 
 <script setup lang="ts">
 import TicketCardView from "@/components/ticket/TicketCardView.vue";
+import SearchMultiSelect from "@/components/SearchMultiSelect.vue";
 import { Button, Dropdown } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideFilter from "~icons/lucide/filter";
@@ -248,6 +263,7 @@ type CardFilters = {
   priority: any[];
   team: any[];
   agent: any[];
+  owner: any[];
 };
 
 type FilterOption = {
@@ -281,6 +297,7 @@ const props = withDefaults(
     priorityFilterOptions?: FilterOption[];
     teamFilterOptions?: FilterOption[];
     agentFilterOptions?: FilterOption[];
+    ownerFilterOptions?: FilterOption[];
     filters: CardFilters;
     search?: string;
     quickViews: QuickView[];
@@ -300,11 +317,13 @@ const props = withDefaults(
     priorityFilterOptions: () => [],
     teamFilterOptions: () => [],
     agentFilterOptions: () => [],
+    ownerFilterOptions: () => [],
     filters: () => ({
       status: [],
       priority: [],
       team: [],
       agent: [],
+      owner: [],
     }),
     search: "",
     quickViews: () => [],
@@ -382,6 +401,7 @@ function updateFilter(key: keyof CardFilters, value: any) {
     priority: props.priorityFilterOptions || [],
     team: props.teamFilterOptions || [],
     agent: props.agentFilterOptions || [],
+    owner: props.ownerFilterOptions || [],
   };
 
   const normalize = (v: any) => {
@@ -433,10 +453,22 @@ const selectedAgentValue = computed(() => {
   return first?.value || "";
 });
 
+const selectedOwnerArray = computed(() => {
+  const first = props.filters.owner?.[0];
+  if (!first) return [];
+  if (typeof first === "string") return [first];
+  return [first?.value || ""].filter(Boolean);
+});
+
 function handleAgentChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
   const value = target?.value || "";
   updateFilter("agent", value || null);
+}
+
+function handleOwnerSelect(values: string[]) {
+  const value = values?.[0] || "";
+  updateFilter("owner", value || null);
 }
 
 const pageLength = computed(() => props.pageLengthCount || 20);

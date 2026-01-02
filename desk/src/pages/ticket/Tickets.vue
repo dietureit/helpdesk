@@ -81,6 +81,7 @@
       :priority-filter-options="priorityFilterOptions"
       :team-filter-options="teamFilterOptions"
       :agent-filter-options="effectiveAgentFilterOptions"
+      :owner-filter-options="ownerFilterOptions"
       :filters="cardFilters"
       :created-at="cardDateFilters.createdAt"
       :resolved-at="cardDateFilters.resolvedAt"
@@ -161,6 +162,7 @@ type CardFilters = {
   priority: any[];
   team: any[];
   agent: any[];
+  owner: any[];
 };
 
 type CardDateFilters = {
@@ -241,6 +243,7 @@ const cardFilters = reactive<CardFilters>({
   priority: [],
   team: [],
   agent: [],
+  owner: [],
 });
 const cardDateFilters = reactive<CardDateFilters>({
   createdAt: "",
@@ -512,12 +515,34 @@ const priorityOptionList = computed(() =>
   (priorities.data || []).map((p) => p.name)
 );
 
+const ownerFilterOptions = computed(() =>
+  (ownerOptions.data || []).map((u) => ({
+    label: u.full_name || u.name || u.email,
+    value: u.email || u.name,
+    image: u.user_image || "",
+  }))
+);
+
 const agentOptions = createResource({
   url: "frappe.client.get_list",
   params: {
     doctype: "HD Agent",
     fields: ["name", "agent_name"],
     limit: 100,
+  },
+  auto: true,
+});
+
+const ownerOptions = createResource({
+  url: "frappe.client.get_list",
+  params: {
+    doctype: "User",
+    fields: ["name", "full_name", "email", "user_image"],
+    filters: {
+      enabled: 1,
+    },
+    limit: 1000,
+    order_by: "full_name asc",
   },
   auto: true,
 });
@@ -652,6 +677,7 @@ function syncCardFiltersWithDefault(sourceFilters?: Record<string, any>) {
   cardFilters.priority = pickValues("priority", priorityFilterOptions.value as any);
   cardFilters.team = pickValues("team", teamFilterOptions.value as any);
   cardFilters.agent = pickValues("agent", agentFilterOptions.value as any);
+  cardFilters.owner = pickValues("owner", ownerFilterOptions.value as any);
 }
 
 watch(
@@ -672,6 +698,7 @@ watch(
     priorityFilterOptions.value,
     teamFilterOptions.value,
     agentFilterOptions.value,
+    ownerFilterOptions.value,
   ],
   () => syncCardFiltersWithDefault(),
   { immediate: true }
@@ -1023,6 +1050,14 @@ function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string,
     }
   }
 
+  if (sourceFilters.owner?.length) {
+    const ownerValues = extractValues(sourceFilters.owner);
+    const owner = ownerValues[0];
+    if (owner) {
+      filters["owner"] = owner;
+    }
+  }
+
   return filters;
 }
 
@@ -1181,6 +1216,7 @@ function resetCardFilters() {
   cardFilters.priority = [];
   cardFilters.team = [];
   cardFilters.agent = [];
+  cardFilters.owner = [];
   cardDateFilters.createdAt = "";
   cardDateFilters.resolvedAt = "";
   cardSearch.value = "";
@@ -1575,6 +1611,7 @@ watch(viewMode, async (newMode, oldMode) => {
     cardFilters.priority = [];
     cardFilters.team = [];
     cardFilters.agent = [];
+    cardFilters.owner = [];
     activeQuickView.value = "";
     loadCardViewTickets();
   }
@@ -1646,6 +1683,19 @@ function applyFiltersFromRoute() {
             }
           }
         }
+
+        // Apply owner filter if present
+        if (queryFilters.owner) {
+          const ownerValue = Array.isArray(queryFilters.owner)
+            ? queryFilters.owner[1]?.[0] || queryFilters.owner[1]
+            : queryFilters.owner;
+          const matchedOwner = ownerFilterOptions.value.find(
+            (opt) => opt.value === ownerValue
+          );
+          if (matchedOwner) {
+            cardFilters.owner = [matchedOwner];
+          }
+        }
         
         // Apply agent filter if present
         if (queryFilters._assign) {
@@ -1707,6 +1757,7 @@ function applyFiltersFromRoute() {
       cardFilters.priority = [];
       cardFilters.team = [];
       cardFilters.agent = [];
+      cardFilters.owner = [];
       activeQuickView.value = "";
       loadCardViewTickets();
     }

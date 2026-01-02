@@ -150,7 +150,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <Dropdown
-                  v-if="isManager"
+                  v-if="isManager || isMessengerAdmin"
                   class="flex justify-end items-center"
                   :options="getRoles(agent.name)"
                   :label="getUserRole(agent.name)"
@@ -162,6 +162,8 @@
                         ? 'user'
                         : getUserRole(agent.name) === 'Manager'
                         ? 'briefcase'
+                        : getUserRole(agent.name) === 'Messenger Admin'
+                        ? 'message-square'
                         : null,
                   }"
                   placement="right"
@@ -207,7 +209,7 @@ import { setActiveSettingsTab } from "./settingsModal";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 
 const { getUserRole, updateUserRoleCache } = useUserStore();
-const { isManager } = useAuthStore();
+const { isManager, isMessengerAdmin } = useAuthStore();
 
 const agentStore = useAgents();
 const search = agentStore.search;
@@ -241,6 +243,22 @@ function getRoles(agent: string) {
           icon: "briefcase",
           onClick: () => {
             updateRole(agent, "Manager");
+          },
+        }),
+    });
+  }
+
+  if (isManager || isMessengerAdmin) {
+    roles.push({
+      label: "Messenger Admin",
+      component: (props) =>
+        RoleOption({
+          role: "Messenger Admin",
+          active: props.active,
+          selected: agentRole === "Messenger Admin",
+          icon: "message-square",
+          onClick: () => {
+            updateRole(agent, "Messenger Admin");
           },
         }),
     });
