@@ -60,6 +60,16 @@ def is_agent(user: str = None) -> bool:
     )
 
 
+def is_dashboard_manager(user: str | None = None) -> bool:
+    """
+    Dashboard "manager" means a user who can view/apply Team/Agent/Owner filters
+    on the dashboard (i.e. see data beyond just their own tickets).
+    """
+    user = user or frappe.session.user
+    roles = set(frappe.get_roles(user))
+    return bool({"Agent Manager", "Messenger Admin", "Messenger Manager"} & roles)
+
+
 def publish_event(
     event: str,
     room: str | None = None,

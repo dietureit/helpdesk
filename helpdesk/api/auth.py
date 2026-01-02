@@ -1,6 +1,6 @@
 import frappe
 
-from helpdesk.utils import is_agent as _is_agent
+from helpdesk.utils import is_agent as _is_agent, is_dashboard_manager
 
 
 @frappe.whitelist()
@@ -33,7 +33,7 @@ def get_user():
     user_name = user.full_name
     user_id = user.name
     username = user.username
-    is_manager = ("Agent Manager") in frappe.get_roles(current_user)
+    is_manager = is_dashboard_manager(current_user)
     language = user.language or frappe.db.get_single_value(
         "System Settings", "language"
     )

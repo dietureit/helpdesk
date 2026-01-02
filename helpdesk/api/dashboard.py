@@ -7,7 +7,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Avg, Count, Function
 from pypika import Case
 
-from helpdesk.utils import agent_only, is_version_16
+from helpdesk.utils import agent_only, is_dashboard_manager, is_version_16
 
 HD_TICKET = "HD Ticket"
 
@@ -27,7 +27,7 @@ def get_dashboard_data(
     Get dashboard data based on the type and date range.
     """
     user = frappe.session.user
-    is_manager = "Agent Manager" in frappe.get_roles(user)
+    is_manager = is_dashboard_manager(user)
 
     if not is_manager and (filters.get("agent") != user or filters.get("team")):
         frappe.throw(
@@ -619,7 +619,7 @@ def get_status_card_data(filters: dict[str, any] = None) -> list[dict[str, any]]
     Returns counts for: Unresolved, Overdue, Due Today, Open, On Hold, Unassigned
     """
     user = frappe.session.user
-    is_manager = "Agent Manager" in frappe.get_roles(user)
+    is_manager = is_dashboard_manager(user)
 
     if filters and not is_manager and (
         filters.get("team")
@@ -769,7 +769,7 @@ def get_today_trend_data(filters: dict[str, any] = None) -> dict[str, any]:
     Get hourly ticket trend data for today and yesterday.
     """
     user = frappe.session.user
-    is_manager = "Agent Manager" in frappe.get_roles(user)
+    is_manager = is_dashboard_manager(user)
 
     if filters and not is_manager and (
         filters.get("team")
@@ -899,7 +899,7 @@ def get_unresolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str
     Get unresolved tickets grouped by team.
     """
     user = frappe.session.user
-    is_manager = "Agent Manager" in frappe.get_roles(user)
+    is_manager = is_dashboard_manager(user)
 
     if filters and not is_manager and (
         filters.get("team")
@@ -956,7 +956,7 @@ def get_satisfaction_data(filters: dict[str, any] = None) -> dict[str, any]:
     Get customer satisfaction breakdown.
     """
     user = frappe.session.user
-    is_manager = "Agent Manager" in frappe.get_roles(user)
+    is_manager = is_dashboard_manager(user)
 
     if filters and not is_manager and (
         filters.get("team")
