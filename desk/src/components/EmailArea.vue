@@ -53,13 +53,21 @@
           <ReplyAllIcon class="h-4 w-4" />
         </Button>
         <Dropdown
-          v-if="showSplitOption"
           :placement="'right'"
           :options="[
+            ...(showSplitOption
+              ? [
+                  {
+                    label: 'Split Ticket',
+                    icon: LucideSplit,
+                    onClick: () => (showSplitModal = true),
+                  },
+                ]
+              : []),
             {
-              label: 'Split Ticket',
-              icon: LucideSplit,
-              onClick: () => (showSplitModal = true),
+              label: 'Edit Content',
+              icon: 'edit-2',
+              onClick: () => handleEditMode(),
             },
           ]"
         >
@@ -87,7 +95,26 @@
       <span v-if="bcc">{{ bcc }}</span>
     </div>
     <div class="border-0 border-t my-3 border-outline-gray-modals" />
-    <EmailContent :content="content" />
+    <div class="mb-2">
+      <TextEditor
+        v-if="editable"
+        :editor-class="[
+          'prose-f shrink text-p-sm transition-all duration-300 ease-in-out block w-full content',
+        ]"
+        :content="_content"
+        :editable="true"
+        :bubble-menu="textEditorMenuButtons"
+        @change="(value: string) => (_content = value)"
+      >
+        <template #bottom>
+          <div class="flex flex-row-reverse gap-2 mt-2">
+            <Button label="Save" variant="solid" @click="handleSave" />
+            <Button label="Discard" @click="handleDiscard" />
+          </div>
+        </template>
+      </TextEditor>
+      <EmailContent v-else :content="displayContent" />
+    </div>
     <div class="flex flex-wrap gap-2">
       <AttachmentItem
         v-for="a in attachments"
@@ -107,8 +134,8 @@
 <script setup lang="ts">
 import { AttachmentItem } from "@/components";
 import { useScreenSize } from "@/composables/screen";
-import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
-import { Dropdown } from "frappe-ui";
+import { dateFormat, dateTooltipFormat, textEditorMenuButtons, timeAgo } from "@/utils";
+import { Button, Dropdown, TextEditor, createResource, toast } from "frappe-ui";
 import { computed, ref } from "vue";
 import LucideSplit from "~icons/lucide/split";
 import { ReplyAllIcon, ReplyIcon } from "./icons";
@@ -140,13 +167,52 @@ const {
   deliveryStatus,
 } = props.activity;
 
-const emit = defineEmits(["reply"]);
+const emit = defineEmits(["reply", "update"]);
 
 const auth = storeToRefs(useAuthStore());
 
 const { isMobileView } = useScreenSize();
 
 const showSplitModal = ref(false);
+const editable = ref(false);
+// Local display content so UI updates immediately without full reload
+const displayContent = ref(content);
+const _content = ref(displayContent.value);
+
+function handleEditMode() {
+  editable.value = true;
+}
+
+function handleDiscard() {
+  // Revert editor to last saved display content
+  _content.value = displayContent.value;
+  editable.value = false;
+}
+
+const updateEmailContent = createResource({
+  url: "frappe.client.set_value",
+  makeParams: () => ({
+    doctype: "Communication",
+    name,
+    fieldname: "content",
+    value: _content.value,
+  }),
+  onSuccess() {
+    // Update local display content immediately so activity list reflects change
+    displayContent.value = _content.value;
+    editable.value = false;
+    toast.success("Email content updated");
+    emit("update");
+  },
+});
+
+function handleSave() {
+  if (_content.value === content) {
+    editable.value = false;
+    return;
+  }
+  updateEmailContent.submit();
+}
 
 const status = computed(() => {
   let _status = deliveryStatus;
@@ -174,14 +240,14 @@ const reply = () => {
 const replyAll = () => {
   const user = auth.user.value;
 
-  const normalizeAndFilter = (field) => {
-    let arr;
+  const normalizeAndFilter = (field: string | string[] | undefined) => {
+    let arr: string[];
     if (typeof field === "string") {
       arr = field.split(",").map((s) => s.trim());
     } else {
-      arr = field || [];
+      arr = (field || []) as string[];
     }
-    return arr.filter((item) => item !== user && item !== sender.name);
+    return arr.filter((item: string) => item !== user && item !== sender.name);
   };
 
   const filteredTo = normalizeAndFilter(to);

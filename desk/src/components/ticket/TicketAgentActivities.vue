@@ -58,6 +58,7 @@
               "
               class="py-2 px-3"
               @reply="(e) => emit('email:reply', e)"
+              @update="() => emit('update')"
             />
             <CommentBox
               v-else-if="activity.type === 'comment'"
