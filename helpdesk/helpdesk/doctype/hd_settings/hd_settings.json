@@ -12,6 +12,7 @@
   "restrict_tickets_by_agent_group",
   "do_not_restrict_tickets_without_an_agent_group",
   "assign_within_team",
+  "assign_all_team_members_on_team_assignment",
   "column_break_dxlq",
   "assignment_rules_section",
   "base_support_rotation",
@@ -20,7 +21,11 @@
   "ticket_tab",
   "ticket_type_section",
   "default_ticket_type",
+  "ticket_type_team_assignment_rules",
   "column_break_zxek",
+  "notification_automation_section",
+  "ticket_notification_sender_email_account",
+  "ticket_notification_rules",
   "feedback_section",
   "is_feedback_mandatory",
   "column_break_kegb",
@@ -152,8 +157,32 @@
    "options": "HD Ticket Type"
   },
   {
+   "fieldname": "ticket_type_team_assignment_rules",
+   "fieldtype": "Table",
+   "label": "Ticket Type to Team Assignment Rules",
+   "options": "HD Ticket Type Team Assignment"
+  },
+  {
    "fieldname": "column_break_zxek",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notification_automation_section",
+   "fieldtype": "Section Break",
+   "label": "Notification Automation Rules"
+  },
+  {
+   "description": "Outgoing email account used for ticket notification automation emails.",
+   "fieldname": "ticket_notification_sender_email_account",
+   "fieldtype": "Link",
+   "label": "Notification Sender Email Account",
+   "options": "Email Account"
+  },
+  {
+   "fieldname": "ticket_notification_rules",
+   "fieldtype": "Table",
+   "label": "Ticket Notification Rules",
+   "options": "HD Ticket Notification Rule"
   },
   {
    "fieldname": "workflow_tab",
@@ -330,6 +359,12 @@
    "fieldname": "assign_within_team",
    "fieldtype": "Check",
    "label": "Restrict agent assignment to selected Team"
+  },
+  {
+   "default": "0",
+   "fieldname": "assign_all_team_members_on_team_assignment",
+   "fieldtype": "Check",
+   "label": "Assign all Team members when Team is set"
   },
   {
    "fieldname": "email_customisations_tab",

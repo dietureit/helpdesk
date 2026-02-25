@@ -77,6 +77,7 @@ class HDTicket(Document):
     def before_validate(self):
         self.check_update_perms()
         self.set_ticket_type()
+        self.apply_team_mapping_from_ticket_type()
         self.set_raised_by()
         self.set_priority()
         self.set_first_responded_on()
@@ -196,6 +197,35 @@ class HDTicket(Document):
                 f"Auto-assigned team '{self.agent_group}' to ticket based on ticket_type '{self.ticket_type}'"
             )
 
+    def apply_team_mapping_from_ticket_type(self):
+        """
+        Apply explicit ticket-type -> team mapping from HD Settings.
+        Works on new ticket creation and when ticket_type changes.
+        """
+        if not self.ticket_type:
+            return
+
+        settings = frappe.get_cached_doc("HD Settings", "HD Settings")
+        mapping_rows = settings.get("ticket_type_team_assignment_rules") or []
+        if not mapping_rows:
+            return
+
+        matched_team = None
+        for row in mapping_rows:
+            if not getattr(row, "enabled", 1):
+                continue
+            if getattr(row, "ticket_type", None) == self.ticket_type and getattr(
+                row, "team", None
+            ):
+                matched_team = row.team
+                break
+
+        if matched_team:
+            self.agent_group = matched_team
+        elif self.is_new() and not self.agent_group:
+            # Keep old fallback behavior for backward compatibility.
+            self.set_agent_group_from_ticket_type()
+
     def after_insert(self):
         if self.ticket_split_from:
             log_ticket_activity(
@@ -223,6 +253,7 @@ class HDTicket(Document):
 
         # Send notification to team members when agent_group is assigned
         if self.agent_group and not frappe.flags.initial_sync:
+            self.assign_all_team_members_if_enabled()
             # self.send_team_notification_email()
             self.create_team_notifications()
 
@@ -240,23 +271,29 @@ class HDTicket(Document):
 
         # Send notification to team members when agent_group is assigned/changed
         if self.agent_group and self.has_value_changed("agent_group"):
+            self.assign_all_team_members_if_enabled()
             # self.send_team_notification_email()
             self.create_team_notifications()
 
         self.remove_assignment_if_not_in_team()
         self.publish_update()
         self.update_search_index()
+        self.enqueue_notification_automation_rules()
 
     def notify_agent(self, agent, notification_type="Assignment"):
-        frappe.get_doc(
-            frappe._dict(
-                doctype="HD Notification",
-                user_from=frappe.session.user,
-                reference_ticket=self.name,
-                user_to=agent,
-                notification_type=notification_type,
-            )
-        ).insert(ignore_permissions=True)
+        try:
+            frappe.get_doc(
+                frappe._dict(
+                    doctype="HD Notification",
+                    user_from=frappe.session.user,
+                    reference_ticket=self.name,
+                    user_to=agent,
+                    notification_type=notification_type,
+                )
+            ).insert(ignore_permissions=True)
+        except frappe.DuplicateEntryError:
+            # Duplicate Assignment notifications are intentionally ignored.
+            return
 
     def update_search_index(self):
         search = HelpdeskSearch()
@@ -1001,11 +1038,311 @@ class HDTicket(Document):
                         notification_type=notification_type,
                     )
                 ).insert(ignore_permissions=True)
+            except frappe.DuplicateEntryError:
+                # Duplicate Assignment notifications are intentionally ignored.
+                continue
             except Exception as e:
                 frappe.log_error(
                     message=f"Could not create HD Notification for user {user} on ticket {self.name}: {str(e)}",
                     title="HD Notification Creation Error"
                 )
+
+    def assign_all_team_members_if_enabled(self):
+        """
+        Optionally assign all members of the selected team to this ticket.
+        Controlled by HD Settings.assign_all_team_members_on_team_assignment.
+        """
+        if not self.agent_group:
+            return
+
+        enable_assign_all = frappe.get_cached_value(
+            "HD Settings",
+            "HD Settings",
+            "assign_all_team_members_on_team_assignment",
+        )
+        if not int(enable_assign_all or 0):
+            return
+
+        team_members = frappe.get_all(
+            "HD Team Member",
+            filters={"parent": self.agent_group},
+            pluck="user",
+        )
+        if not team_members:
+            return
+
+        current_assignees = set()
+        assignees = get_assignees({"doctype": "HD Ticket", "name": self.name}) or []
+        for row in assignees:
+            if getattr(row, "owner", None):
+                current_assignees.add(row.owner)
+
+        users_to_assign = [u for u in team_members if u and u not in current_assignees]
+        if not users_to_assign:
+            return
+
+        try:
+            assign(
+                {
+                    "assign_to": users_to_assign,
+                    "doctype": "HD Ticket",
+                    "name": self.name,
+                }
+            )
+        except Exception:
+            frappe.log_error(
+                title="HD Ticket Team Members Assignment Error",
+                message=frappe.get_traceback(),
+            )
+
+    def enqueue_notification_automation_rules(self):
+        """Run notification rules in background to keep ticket save responsive."""
+        try:
+            frappe.enqueue(
+                "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.run_notification_automation_rules_job",
+                ticket_name=self.name,
+                user=frappe.session.user,
+                queue="short",
+                now=False,
+            )
+        except Exception:
+            frappe.log_error(
+                title="HD Ticket Notification Automation Enqueue Error",
+                message=frappe.get_traceback(),
+            )
+
+    def run_notification_automation_rules(self):
+        """Evaluate HD Settings rules and create HD Notification / optional email."""
+        try:
+            settings = frappe.get_cached_doc("HD Settings", "HD Settings")
+            rules = settings.get("ticket_notification_rules") or []
+            if not rules:
+                return
+
+            for rule in rules:
+                if not getattr(rule, "is_enabled", 1):
+                    continue
+
+                condition = (getattr(rule, "condition", None) or "").strip()
+                if not condition:
+                    condition = self._convert_condition_json_to_expression(
+                        getattr(rule, "condition_json", None)
+                    )
+                if not condition:
+                    continue
+
+                try:
+                    matched = bool(frappe.safe_eval(condition, None, {"doc": self.as_dict()}))
+                except Exception:
+                    frappe.log_error(
+                        title="HD Ticket Notification Rule Error",
+                        message=f"Invalid condition for rule '{getattr(rule, 'description', '')}'\n{frappe.get_traceback()}",
+                    )
+                    continue
+
+                if not matched:
+                    continue
+
+                recipients = self._resolve_notification_rule_recipients(rule)
+                if not recipients:
+                    continue
+
+                message = (getattr(rule, "notification_message", None) or "").strip()
+                notification_type = getattr(rule, "notification_type", None) or "Team Assignment"
+                actor = frappe.session.user if frappe.session.user else self.owner
+
+                for user in recipients:
+                    try:
+                        frappe.get_doc(
+                            frappe._dict(
+                                doctype="HD Notification",
+                                user_from=actor,
+                                user_to=user,
+                                notification_type=notification_type,
+                                reference_ticket=self.name,
+                                message=self._render_rule_template(
+                                    message,
+                                    recipient=user,
+                                ),
+                            )
+                        ).insert(ignore_permissions=True)
+                    except frappe.DuplicateEntryError:
+                        # Duplicate Assignment notifications are intentionally ignored.
+                        continue
+                    except Exception:
+                        frappe.log_error(
+                            title="HD Notification Automation Insert Error",
+                            message=frappe.get_traceback(),
+                        )
+
+                if getattr(rule, "send_email", 0):
+                    subject_template = (getattr(rule, "email_subject", None) or "").strip() or f"Ticket #{self.name} Notification"
+                    body_template = (getattr(rule, "email_message", None) or "").strip() or message
+                    sender_email = self._get_notification_rule_sender_email()
+                    try:
+                        for recipient in recipients:
+                            rendered_subject = self._render_rule_template(
+                                subject_template, recipient=recipient
+                            )
+                            rendered_body = self._render_rule_template(
+                                body_template, recipient=recipient
+                            )
+                            email_args = {
+                                "recipients": [recipient],
+                                "subject": rendered_subject,
+                                "message": rendered_body,
+                                "reference_doctype": "HD Ticket",
+                                "reference_name": self.name,
+                                "now": True,
+                            }
+                            if sender_email:
+                                email_args["sender"] = sender_email
+                                email_args["reply_to"] = sender_email
+                            frappe.sendmail(**email_args)
+                    except Exception:
+                        frappe.log_error(
+                            title="HD Notification Automation Email Error",
+                            message=frappe.get_traceback(),
+                        )
+        except Exception:
+            frappe.log_error(
+                title="HD Ticket Notification Automation Error",
+                message=frappe.get_traceback(),
+            )
+
+    def _resolve_notification_rule_recipients(self, rule):
+        notify_to = getattr(rule, "notify_to", None) or "Assigned Agents"
+        recipients = []
+
+        if notify_to == "Assigned Agents":
+            recipients = [a.get("name") for a in (self.get_assigned_agents() or []) if a.get("name")]
+        elif notify_to == "Team Members":
+            if self.agent_group:
+                recipients = frappe.get_all(
+                    "HD Team Member",
+                    filters={"parent": self.agent_group},
+                    pluck="user",
+                )
+        elif notify_to == "Ticket Owner":
+            recipients = [self.owner] if self.owner else []
+        elif notify_to == "Specific User":
+            user = getattr(rule, "notify_user", None)
+            recipients = [user] if user else []
+
+        # Keep recipients clean and unique.
+        recipients = [r for r in recipients if r]
+        return list(dict.fromkeys(recipients))
+
+    def _convert_condition_json_to_expression(self, condition_json):
+        """Convert condition JSON into a safe expression string."""
+        if not condition_json:
+            return ""
+
+        try:
+            import json
+
+            conditions = condition_json
+            if isinstance(condition_json, str):
+                conditions = json.loads(condition_json)
+        except Exception:
+            return ""
+
+        def _parse(node):
+            if isinstance(node, str):
+                token = node.strip().lower()
+                return token if token in {"and", "or"} else ""
+
+            if isinstance(node, list):
+                if len(node) == 3 and isinstance(node[0], str):
+                    field, operator, value = node
+                    op = (operator or "").strip().lower()
+                    field_access = f"doc.{field}"
+
+                    if op == "is":
+                        value_str = str(value or "").strip().lower()
+                        if value_str == "set":
+                            return field_access
+                        if value_str == "not set":
+                            return f"not {field_access}"
+
+                    if op in {"in", "not in"}:
+                        if isinstance(value, list):
+                            rhs = repr(value)
+                        else:
+                            rhs = repr(
+                                [v.strip() for v in str(value or "").split(",") if v.strip()]
+                            )
+                        return f"{field_access} {op} {rhs}"
+
+                    mapped_op = {"=": "==", "equals": "=="}.get(op, operator)
+                    return f"{field_access} {mapped_op} {repr(value)}"
+
+                parts = [_parse(x) for x in node]
+                parts = [p for p in parts if p]
+                return " ".join(parts)
+
+            return ""
+
+        expression = _parse(conditions).strip()
+        return expression
+
+    def _render_rule_template(self, template: str, recipient: str | None = None) -> str:
+        """
+        Render rule template text with dynamic variables.
+        Supported variables:
+        - {{ ticket_name }}
+        - {{ ticket_subject }}
+        - {{ ticket_status }}
+        - {{ ticket_type }}
+        - {{ ticket_priority }}
+        - {{ ticket_team }}
+        - {{ ticket_owner }}
+        - {{ recipient }}
+        - {{ recipient_name }}
+        """
+        template = template or ""
+        recipient_name = ""
+        if recipient:
+            recipient_name = (
+                frappe.db.get_value("User", recipient, "full_name") or recipient
+            )
+
+        context = {
+            "ticket_name": self.name,
+            "ticket_subject": self.subject or "",
+            "ticket_status": self.status or "",
+            "ticket_type": self.ticket_type or "",
+            "ticket_priority": self.priority or "",
+            "ticket_team": self.agent_group or "",
+            "ticket_owner": self.owner or "",
+            "recipient": recipient or "",
+            "recipient_name": recipient_name,
+        }
+        try:
+            return frappe.render_template(template, context)
+        except Exception:
+            # keep raw template if rendering fails
+            return template
+
+    def _get_notification_rule_sender_email(self) -> str | None:
+        """
+        Resolve sender email for notification automation emails from HD Settings.
+        Falls back to ticket sender resolution if specific setting is missing.
+        """
+        email_account_name = frappe.get_cached_value(
+            "HD Settings",
+            "HD Settings",
+            "ticket_notification_sender_email_account",
+        )
+        if email_account_name:
+            email_id = frappe.db.get_value("Email Account", email_account_name, "email_id")
+            if email_id:
+                return email_id
+
+        fallback_account = self.sender_email()
+        if fallback_account and getattr(fallback_account, "email_id", None):
+            return fallback_account.email_id
+        return None
 
     @frappe.whitelist()
     def mark_seen(self):
@@ -1632,3 +1969,108 @@ def mark_overdue_tickets():
         frappe.db.commit()  # nosemgrep
     except Exception as e:
         frappe.log_error(title="Error marking overdue tickets", message=frappe.get_traceback())
+
+
+def _preview_notification_rule_recipients(ticket: HDTicket, rule: dict) -> list[str]:
+    notify_to = (rule.get("notify_to") or "Assigned Agents").strip()
+    recipients: list[str] = []
+
+    if notify_to == "Assigned Agents":
+        recipients = [a.get("name") for a in (ticket.get_assigned_agents() or []) if a.get("name")]
+    elif notify_to == "Team Members":
+        if ticket.agent_group:
+            recipients = frappe.get_all(
+                "HD Team Member",
+                filters={"parent": ticket.agent_group},
+                pluck="user",
+            )
+    elif notify_to == "Ticket Owner":
+        recipients = [ticket.owner] if ticket.owner else []
+    elif notify_to == "Specific User":
+        user = rule.get("notify_user")
+        recipients = [user] if user else []
+
+    recipients = [r for r in recipients if r]
+    return list(dict.fromkeys(recipients))
+
+
+def run_notification_automation_rules_job(ticket_name: str, user: str | None = None):
+    """Background worker entrypoint for notification automation rules."""
+    if not ticket_name:
+        return
+    try:
+        if user:
+            frappe.set_user(user)
+        ticket = frappe.get_doc("HD Ticket", ticket_name)
+        ticket.run_notification_automation_rules()
+    except Exception:
+        frappe.log_error(
+            title="HD Ticket Notification Automation Background Error",
+            message=frappe.get_traceback(),
+        )
+
+
+@frappe.whitelist()
+def evaluate_hd_ticket_rule_preview(
+    ticket_name: str | int, rule: dict | str, rule_kind: str = "notification"
+):
+    """
+    Preview if a rule matches a given ticket and return evaluation details.
+    Used by HD Settings UI "Test Rule" action.
+    """
+    if not ticket_name:
+        frappe.throw(_("Ticket is required"))
+
+    ticket_name = str(ticket_name)
+    ticket: HDTicket = frappe.get_doc("HD Ticket", ticket_name)
+    if not ticket.has_permission("read"):
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if isinstance(rule, str):
+        try:
+            import json
+
+            rule = json.loads(rule)
+        except Exception:
+            rule = {}
+    rule = rule or {}
+
+    condition = (rule.get("condition") or "").strip()
+    if not condition:
+        condition = ticket._convert_condition_json_to_expression(rule.get("condition_json"))
+
+    matched = True
+    if condition:
+        try:
+            matched = bool(frappe.safe_eval(condition, None, {"doc": ticket.as_dict()}))
+        except Exception:
+            return {
+                "matched": False,
+                "condition": condition,
+                "error": _("Invalid condition. Please check selected values."),
+            }
+
+    if rule_kind == "team_assignment":
+        return {
+            "matched": matched,
+            "condition": condition,
+            "team": rule.get("team"),
+            "ticket": ticket.name,
+        }
+
+    recipients = _preview_notification_rule_recipients(ticket, rule) if matched else []
+    recipient_rows = (
+        frappe.get_all(
+            "User",
+            filters={"name": ["in", recipients]},
+            fields=["name", "full_name", "email"],
+        )
+        if recipients
+        else []
+    )
+    return {
+        "matched": matched,
+        "condition": condition,
+        "ticket": ticket.name,
+        "recipients": recipient_rows,
+    }

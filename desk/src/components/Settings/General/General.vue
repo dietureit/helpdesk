@@ -79,6 +79,7 @@ import { __ } from "@/translation";
 import { disableSettingModalOutsideClick } from "../settingsModal";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { HDSettingsSymbol } from "@/types";
+import { convertToConditions } from "@/utils";
 
 const isDirty = ref(false);
 const initialData = ref(null);
@@ -90,6 +91,7 @@ const settingsData = ref({
   autoCloseStatus: "",
   autoCloseTickets: "",
   assignWithinTeam: false,
+  assignAllTeamMembersOnTeamAssignment: false,
   doNotRestrictTicketsWithoutAnAgentGroup: false,
   restrictTicketsByAgentGroup: false,
   updateStatusTo: "",
@@ -99,6 +101,8 @@ const settingsData = ref({
   defaultTicketType: "",
   preferKnowledgeBase: false,
   skipEmailWorkflow: false,
+  ticketTypeTeamAssignmentRules: [],
+  ticketNotificationRules: [],
 });
 const disableSignup = ref(false);
 
@@ -136,6 +140,8 @@ const saveSettingsResource = createResource({
         auto_close_status: settingsData.value.autoCloseStatus,
         auto_close_tickets: settingsData.value.autoCloseTickets,
         assign_within_team: settingsData.value.assignWithinTeam,
+        assign_all_team_members_on_team_assignment:
+          settingsData.value.assignAllTeamMembersOnTeamAssignment,
         do_not_restrict_tickets_without_an_agent_group:
           settingsData.value.doNotRestrictTicketsWithoutAnAgentGroup,
         restrict_tickets_by_agent_group:
@@ -148,6 +154,32 @@ const saveSettingsResource = createResource({
         default_ticket_type: settingsData.value.defaultTicketType,
         prefer_knowledge_base: settingsData.value.preferKnowledgeBase,
         skip_email_workflow: settingsData.value.skipEmailWorkflow,
+        ticket_type_team_assignment_rules: (settingsData.value.ticketTypeTeamAssignmentRules || []).map((row: any) => ({
+          enabled: row.enabled ? 1 : 0,
+          ticket_type: row.ticket_type,
+          team: row.team,
+          condition_json: JSON.stringify(row._conditions || []),
+          condition: convertToConditions({
+            conditions: row._conditions || [],
+            fieldPrefix: "doc",
+          }),
+        })),
+        ticket_notification_rules: (settingsData.value.ticketNotificationRules || []).map((row: any) => ({
+          is_enabled: row.is_enabled ? 1 : 0,
+          description: row.description,
+          condition_json: JSON.stringify(row._conditions || []),
+          condition: convertToConditions({
+            conditions: row._conditions || [],
+            fieldPrefix: "doc",
+          }),
+          notification_message: row.notification_message,
+          notification_type: row.notification_type,
+          notify_to: row.notify_to,
+          notify_user: row.notify_user,
+          send_email: row.send_email ? 1 : 0,
+          email_subject: row.email_subject,
+          email_message: row.email_message,
+        })),
       },
     };
   },
@@ -166,6 +198,9 @@ const transformData = (data: any) => {
     autoCloseStatus: data.auto_close_status,
     autoCloseTickets: data.auto_close_tickets,
     assignWithinTeam: Boolean(data.assign_within_team),
+    assignAllTeamMembersOnTeamAssignment: Boolean(
+      data.assign_all_team_members_on_team_assignment
+    ),
     doNotRestrictTicketsWithoutAnAgentGroup: Boolean(
       data.do_not_restrict_tickets_without_an_agent_group
     ),
@@ -177,6 +212,40 @@ const transformData = (data: any) => {
     defaultTicketType: data.default_ticket_type,
     preferKnowledgeBase: Boolean(data.prefer_knowledge_base),
     skipEmailWorkflow: Boolean(data.skip_email_workflow),
+    ticketTypeTeamAssignmentRules: (data.ticket_type_team_assignment_rules || []).map((row: any) => ({
+      _id: Math.random().toString(36).slice(2),
+      enabled: Boolean(row.enabled),
+      ticket_type: row.ticket_type || "",
+      team: row.team || "",
+      condition_json: row.condition_json || "[]",
+      _conditions: (() => {
+        try {
+          return JSON.parse(row.condition_json || "[]");
+        } catch {
+          return [];
+        }
+      })(),
+    })),
+    ticketNotificationRules: (data.ticket_notification_rules || []).map((row: any) => ({
+      _id: Math.random().toString(36).slice(2),
+      is_enabled: Boolean(row.is_enabled),
+      description: row.description || "",
+      condition_json: row.condition_json || "[]",
+      _conditions: (() => {
+        try {
+          return JSON.parse(row.condition_json || "[]");
+        } catch {
+          return [];
+        }
+      })(),
+      notification_message: row.notification_message || "",
+      notification_type: row.notification_type || "Team Assignment",
+      notify_to: row.notify_to || "Assigned Agents",
+      notify_user: row.notify_user || "",
+      send_email: Boolean(row.send_email),
+      email_subject: row.email_subject || "",
+      email_message: row.email_message || "",
+    })),
   };
 };
 

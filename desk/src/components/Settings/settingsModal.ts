@@ -24,6 +24,7 @@ import { Avatar } from "frappe-ui";
 import { useAuthStore } from "@/stores/auth";
 import General from "./General/General.vue";
 import SettingsGear from "~icons/lucide/settings";
+import Automations from "./Automations/Automations.vue";
 
 const auth = useAuthStore();
 
@@ -112,6 +113,12 @@ export const tabs = computed(() => {
           component: markRaw(FieldDependencyConfig),
           condition: () => auth.isAdmin || auth.isManager,
         },
+        {
+          label: __("Automations"),
+          icon: markRaw(Settings),
+          component: markRaw(Automations),
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
     {
@@ -157,6 +164,7 @@ type TabName =
   | "Business Holidays"
   | "Assignment Rules"
   | "Field Dependencies"
+  | "Automations"
   | "Telephony";
 
 export const setActiveSettingsTab = (tabName: TabName) => {

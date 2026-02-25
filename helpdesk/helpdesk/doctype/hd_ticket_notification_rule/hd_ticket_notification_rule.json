@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "creation": "2026-02-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "is_enabled",
+  "description",
+  "condition_json",
+  "condition",
+  "notification_message",
+  "notification_type",
+  "notify_to",
+  "notify_user",
+  "send_email",
+  "email_subject",
+  "email_message"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "is_enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description"
+  },
+  {
+   "description": "Auto-generated from UI condition builder.",
+   "fieldname": "condition_json",
+   "fieldtype": "Code",
+   "label": "Condition JSON",
+   "max_height": "1rem"
+  },
+  {
+   "description": "Simple Python Expression, Example: doc.status == 'Open' and doc.priority == 'High'",
+   "fieldname": "condition",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "Condition",
+   "options": "PythonExpression"
+  },
+  {
+   "fieldname": "notification_message",
+   "fieldtype": "Small Text",
+   "label": "Notification Message",
+   "reqd": 1
+  },
+  {
+   "default": "Team Assignment",
+   "fieldname": "notification_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Notification Type",
+   "options": "Assignment\nMention\nReaction\nTeam Assignment",
+   "reqd": 1
+  },
+  {
+   "default": "Assigned Agents",
+   "fieldname": "notify_to",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Notify To",
+   "options": "Assigned Agents\nTeam Members\nTicket Owner\nSpecific User",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.notify_to=='Specific User'",
+   "fieldname": "notify_user",
+   "fieldtype": "Link",
+   "label": "Specific User",
+   "mandatory_depends_on": "eval:doc.notify_to=='Specific User'",
+   "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "send_email",
+   "fieldtype": "Check",
+   "label": "Send Email"
+  },
+  {
+   "depends_on": "send_email",
+   "fieldname": "email_subject",
+   "fieldtype": "Data",
+   "label": "Email Subject"
+  },
+  {
+   "depends_on": "send_email",
+   "fieldname": "email_message",
+   "fieldtype": "Text",
+   "label": "Email Message"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD Ticket Notification Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
