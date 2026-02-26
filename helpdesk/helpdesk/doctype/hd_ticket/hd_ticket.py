@@ -2001,8 +2001,12 @@ def run_notification_automation_rules_job(ticket_name: str, user: str | None = N
     try:
         if user:
             frappe.set_user(user)
+        if not frappe.db.exists("HD Ticket", ticket_name):
+            return  # Ticket deleted before job ran
         ticket = frappe.get_doc("HD Ticket", ticket_name)
         ticket.run_notification_automation_rules()
+    except frappe.DoesNotExistError:
+        pass  # Ticket deleted between exists check and get_doc
     except Exception:
         frappe.log_error(
             title="HD Ticket Notification Automation Background Error",
