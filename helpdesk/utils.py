@@ -84,10 +84,18 @@ def publish_event(
     :param user: User to send the event to, defaults to current user
     """
     room = room or get_website_room()
-    user = user or frappe.session.user
-    frappe.publish_realtime(
-        event, message=data, room=room, after_commit=True, user=user
-    )
+    publish_kwargs = {
+        "message": data,
+        "room": room,
+        "after_commit": True,
+    }
+    # Only target a specific user when explicitly requested.
+    # For room broadcasts (ticket updates/comments), passing a default user
+    # can prevent other room subscribers from receiving the event.
+    if user:
+        publish_kwargs["user"] = user
+
+    frappe.publish_realtime(event, **publish_kwargs)
 
 
 def get_doc_room(doctype: str, name: str) -> str:
