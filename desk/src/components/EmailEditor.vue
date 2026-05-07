@@ -236,6 +236,16 @@ const newEmail = useStorage("emailBoxContent" + props.ticketId, null);
 const { updateOnboardingStep } = useOnboarding("helpdesk");
 const { isManager } = useAuthStore();
 
+function completeReplyOnboardingStep() {
+  if (!isManager) return;
+
+  try {
+    updateOnboardingStep("reply_on_ticket");
+  } catch (error) {
+    console.warn("Failed to update reply onboarding step", error);
+  }
+}
+
 // Initialize typing composable
 const { onUserType, cleanup } = useTyping(props.ticketId);
 
@@ -288,9 +298,7 @@ const sendMail = createResource({
     resetState();
     emit("submit");
 
-    if (isManager) {
-      updateOnboardingStep("reply_on_ticket");
-    }
+    completeReplyOnboardingStep();
   },
   debounce: 300,
 });

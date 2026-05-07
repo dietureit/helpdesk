@@ -681,11 +681,11 @@ function setUpOnboarding() {
   });
 }
 
-// onMounted(() => {
-//   setUpOnboarding();
-//   if (isCustomerPortal.value) return;
-//   useShortcut({ key: ",", meta: true }, () => {
-//     showSettingsModal.value = !showSettingsModal.value;
-//   });
-// });
+onMounted(() => {
+  setUpOnboarding();
+  if (isCustomerPortal.value) return;
+  useShortcut({ key: ",", meta: true }, () => {
+    showSettingsModal.value = !showSettingsModal.value;
+  });
+});
 </script>
