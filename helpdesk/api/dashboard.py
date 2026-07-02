@@ -951,6 +951,63 @@ def get_unresolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str
 
 @frappe.whitelist()
 @agent_only
+def get_resolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str, any]]:
+    """
+    Get resolved tickets grouped by team.
+    """
+    user = frappe.session.user
+    is_manager = is_dashboard_manager(user)
+
+    if filters and not is_manager and (
+        filters.get("team")
+        or filters.get("agent") not in (None, user, "@me")
+        or filters.get("owner") not in (None, user, "@me")
+    ):
+        frappe.throw(
+            _("You are not allowed to view this dashboard data."),
+            frappe.PermissionError,
+        )
+
+    resolved_statuses = frappe.get_all(
+        "HD Ticket Status",
+        filters={"category": "Resolved"},
+        pluck="name",
+    )
+
+    base_filters = {
+        "status": ["in", resolved_statuses] if resolved_statuses else ["=", "Resolved"],
+    }
+    if filters:
+        if filters.get("team"):
+            base_filters["agent_group"] = filters.get("team")
+        if filters.get("agent"):
+            agent = filters.get("agent")
+            if agent == "@me":
+                agent = user
+            base_filters["_assign"] = ["like", f"%{agent}%"]
+        if filters.get("owner"):
+            owner = filters.get("owner")
+            if owner == "@me":
+                owner = user
+            base_filters["owner"] = owner
+
+    result = frappe.get_all(
+        HD_TICKET,
+        fields=["agent_group as name", COUNT_NAME],
+        filters=base_filters,
+        group_by="agent_group",
+        order_by=COUNT_DESC,
+    )
+
+    for r in result:
+        if not r.name:
+            r.name = _("Unassigned")
+
+    return result
+
+
+@frappe.whitelist()
+@agent_only
 def get_satisfaction_data(filters: dict[str, any] = None) -> dict[str, any]:
     """
     Get customer satisfaction breakdown.
@@ -1039,3 +1096,30 @@ def get_satisfaction_data(filters: dict[str, any] = None) -> dict[str, any]:
         "neutral": round(neutral / total * 100) if total > 0 else 0,
         "negative": round(negative / total * 100) if total > 0 else 0,
     }
+
+
+@frappe.whitelist()
+@agent_only
+def get_monthly_group_report(months: int = 12) -> list[dict[str, any]]:
+    """
+    Month-wise incoming ticket count, resolved and unresolved counts, by ticket type.
+    """
+    months = min(int(months), 36)
+    from_date = frappe.utils.add_months(frappe.utils.nowdate(), -months)
+
+    return frappe.db.sql(
+        """
+        SELECT
+            DATE_FORMAT(creation, '%%Y-%%m') AS month,
+            COALESCE(NULLIF(ticket_type, ''), 'Unspecified') AS ticket_type,
+            COUNT(*) AS total,
+            SUM(CASE WHEN resolution_date IS NOT NULL THEN 1 ELSE 0 END) AS resolved,
+            SUM(CASE WHEN resolution_date IS NULL THEN 1 ELSE 0 END) AS unresolved
+        FROM `tabHD Ticket`
+        WHERE creation >= %(from_date)s
+        GROUP BY month, ticket_type
+        ORDER BY month DESC, total DESC
+        """,
+        {"from_date": from_date},
+        as_dict=True,
+    )

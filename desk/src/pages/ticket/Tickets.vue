@@ -82,6 +82,7 @@
       :team-filter-options="teamFilterOptions"
       :agent-filter-options="effectiveAgentFilterOptions"
       :owner-filter-options="ownerFilterOptions"
+      :ticket-type-filter-options="ticketTypeFilterOptions"
       :filters="cardFilters"
       :created-at="cardDateFilters.createdAt"
       :resolved-at="cardDateFilters.resolvedAt"
@@ -163,6 +164,7 @@ type CardFilters = {
   team: any[];
   agent: any[];
   owner: any[];
+  ticketType: any[];
 };
 
 type CardDateFilters = {
@@ -244,6 +246,7 @@ const cardFilters = reactive<CardFilters>({
   team: [],
   agent: [],
   owner: [],
+  ticketType: [],
 });
 const cardDateFilters = reactive<CardDateFilters>({
   createdAt: "",
@@ -593,6 +596,23 @@ const teamOptions = createResource({
 const teamFilterOptions = computed(() =>
   (teamOptions.data || []).map((t) => ({
     label: t.team_name || t.name,
+    value: t.name,
+  }))
+);
+
+const ticketTypeOptions = createResource({
+  url: "frappe.client.get_list",
+  params: {
+    doctype: "HD Ticket Type",
+    fields: ["name"],
+    limit: 100,
+  },
+  auto: true,
+});
+
+const ticketTypeFilterOptions = computed(() =>
+  (ticketTypeOptions.data || []).map((t) => ({
+    label: t.name,
     value: t.name,
   }))
 );
@@ -947,6 +967,7 @@ function updateCardFilters(value: CardFilters) {
   cardFilters.priority = value?.priority || [];
   cardFilters.team = value?.team || [];
   cardFilters.agent = value?.agent || [];
+  cardFilters.ticketType = value?.ticketType || [];
 }
 
 function updateCardDateFilter(key: keyof CardDateFilters, value: string) {
@@ -1055,6 +1076,13 @@ function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string,
     const owner = ownerValues[0];
     if (owner) {
       filters["owner"] = owner;
+    }
+  }
+
+  if (sourceFilters.ticketType?.length) {
+    const ticketTypeValues = extractValues(sourceFilters.ticketType).filter(Boolean);
+    if (ticketTypeValues.length) {
+      filters["ticket_type"] = ["in", ticketTypeValues];
     }
   }
 
@@ -1217,6 +1245,7 @@ function resetCardFilters() {
   cardFilters.team = [];
   cardFilters.agent = [];
   cardFilters.owner = [];
+  cardFilters.ticketType = [];
   cardDateFilters.createdAt = "";
   cardDateFilters.resolvedAt = "";
   cardSearch.value = "";
@@ -1612,6 +1641,7 @@ watch(viewMode, async (newMode, oldMode) => {
     cardFilters.team = [];
     cardFilters.agent = [];
     cardFilters.owner = [];
+    cardFilters.ticketType = [];
     activeQuickView.value = "";
     loadCardViewTickets();
   }
@@ -1758,6 +1788,7 @@ function applyFiltersFromRoute() {
       cardFilters.team = [];
       cardFilters.agent = [];
       cardFilters.owner = [];
+      cardFilters.ticketType = [];
       activeQuickView.value = "";
       loadCardViewTickets();
     }
