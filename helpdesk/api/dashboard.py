@@ -942,26 +942,64 @@ def get_unresolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str
         order_by=COUNT_DESC,
     )
 
-    # Resolved counts grouped by team, using the same non-status filters.
+    for r in result:
+        if not r.name:
+            r.name = _("Unassigned")
+
+    return result
+
+
+@frappe.whitelist()
+@agent_only
+def get_resolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str, any]]:
+    """
+    Get resolved tickets grouped by team.
+    """
+    user = frappe.session.user
+    is_manager = is_dashboard_manager(user)
+
+    if filters and not is_manager and (
+        filters.get("team")
+        or filters.get("agent") not in (None, user, "@me")
+        or filters.get("owner") not in (None, user, "@me")
+    ):
+        frappe.throw(
+            _("You are not allowed to view this dashboard data."),
+            frappe.PermissionError,
+        )
+
     resolved_statuses = frappe.get_all(
         "HD Ticket Status",
         filters={"category": "Resolved"},
         pluck="name",
     )
-    resolved_filters = dict(base_filters)
-    resolved_filters["status"] = (
-        ["in", resolved_statuses] if resolved_statuses else ["=", "Resolved"]
-    )
-    resolved_rows = frappe.get_all(
+
+    base_filters = {
+        "status": ["in", resolved_statuses] if resolved_statuses else ["=", "Resolved"],
+    }
+    if filters:
+        if filters.get("team"):
+            base_filters["agent_group"] = filters.get("team")
+        if filters.get("agent"):
+            agent = filters.get("agent")
+            if agent == "@me":
+                agent = user
+            base_filters["_assign"] = ["like", f"%{agent}%"]
+        if filters.get("owner"):
+            owner = filters.get("owner")
+            if owner == "@me":
+                owner = user
+            base_filters["owner"] = owner
+
+    result = frappe.get_all(
         HD_TICKET,
         fields=["agent_group as name", COUNT_NAME],
-        filters=resolved_filters,
+        filters=base_filters,
         group_by="agent_group",
+        order_by=COUNT_DESC,
     )
-    resolved_by_group = {r.name: r.count for r in resolved_rows}
 
     for r in result:
-        r.resolved = resolved_by_group.get(r.name, 0)
         if not r.name:
             r.name = _("Unassigned")
 
