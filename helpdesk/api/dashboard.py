@@ -1096,3 +1096,30 @@ def get_satisfaction_data(filters: dict[str, any] = None) -> dict[str, any]:
         "neutral": round(neutral / total * 100) if total > 0 else 0,
         "negative": round(negative / total * 100) if total > 0 else 0,
     }
+
+
+@frappe.whitelist()
+@agent_only
+def get_monthly_group_report(months: int = 12) -> list[dict[str, any]]:
+    """
+    Month-wise incoming ticket count, resolved and unresolved counts, by ticket type.
+    """
+    months = min(int(months), 36)
+    from_date = frappe.utils.add_months(frappe.utils.nowdate(), -months)
+
+    return frappe.db.sql(
+        """
+        SELECT
+            DATE_FORMAT(creation, '%%Y-%%m') AS month,
+            COALESCE(NULLIF(ticket_type, ''), 'Unspecified') AS ticket_type,
+            COUNT(*) AS total,
+            SUM(CASE WHEN resolution_date IS NOT NULL THEN 1 ELSE 0 END) AS resolved,
+            SUM(CASE WHEN resolution_date IS NULL THEN 1 ELSE 0 END) AS unresolved
+        FROM `tabHD Ticket`
+        WHERE creation >= %(from_date)s
+        GROUP BY month, ticket_type
+        ORDER BY month DESC, total DESC
+        """,
+        {"from_date": from_date},
+        as_dict=True,
+    )
