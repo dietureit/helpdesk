@@ -14,17 +14,19 @@
     </div>
 
     <div v-if="groups.length > 0">
-      <div class="grid grid-cols-2 gap-2 text-sm text-gray-500 mb-2">
+      <div class="grid grid-cols-3 gap-2 text-sm text-gray-500 mb-2">
         <span>Group</span>
         <span class="text-right">Open</span>
+        <span class="text-right">Resolved</span>
       </div>
       <div
         v-for="group in groups"
         :key="group.name"
-        class="grid grid-cols-2 gap-2 py-2 border-t border-gray-100"
+        class="grid grid-cols-3 gap-2 py-2 border-t border-gray-100"
       >
         <span class="text-sm text-gray-700">{{ group.name || "Unassigned" }}</span>
         <span class="text-sm text-gray-900 font-medium text-right">{{ group.count }}</span>
+        <span class="text-sm text-gray-900 font-medium text-right">{{ group.resolved ?? 0 }}</span>
       </div>
     </div>
 
@@ -42,6 +44,7 @@ import LucideCheckCircle from "~icons/lucide/check-circle";
 interface UnresolvedGroup {
   name: string;
   count: number;
+  resolved?: number;
 }
 
 interface Props {

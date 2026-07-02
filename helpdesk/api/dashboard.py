@@ -942,7 +942,26 @@ def get_unresolved_grouped_data(filters: dict[str, any] = None) -> list[dict[str
         order_by=COUNT_DESC,
     )
 
+    # Resolved counts grouped by team, using the same non-status filters.
+    resolved_statuses = frappe.get_all(
+        "HD Ticket Status",
+        filters={"category": "Resolved"},
+        pluck="name",
+    )
+    resolved_filters = dict(base_filters)
+    resolved_filters["status"] = (
+        ["in", resolved_statuses] if resolved_statuses else ["=", "Resolved"]
+    )
+    resolved_rows = frappe.get_all(
+        HD_TICKET,
+        fields=["agent_group as name", COUNT_NAME],
+        filters=resolved_filters,
+        group_by="agent_group",
+    )
+    resolved_by_group = {r.name: r.count for r in resolved_rows}
+
     for r in result:
+        r.resolved = resolved_by_group.get(r.name, 0)
         if not r.name:
             r.name = _("Unassigned")
 
