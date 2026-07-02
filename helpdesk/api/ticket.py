@@ -102,6 +102,14 @@ def get_tickets_for_card_view(
             # card-view results stay consistent.
             filter_list.append(["owner", "=", owner])
 
+        ticket_type_filter = raw_filters.get("ticket_type")
+        if isinstance(ticket_type_filter, list) and len(ticket_type_filter) == 2:
+            operator, values = ticket_type_filter
+            if operator == "in" and isinstance(values, list):
+                filter_list.append(["ticket_type", "in", values])
+        elif isinstance(ticket_type_filter, str):
+            filter_list.append(["ticket_type", "=", ticket_type_filter])
+
         # Date range / creation filters (from dashboard duration or query params)
         creation_filter = raw_filters.get("creation")
         if isinstance(creation_filter, list) and len(creation_filter) == 2:

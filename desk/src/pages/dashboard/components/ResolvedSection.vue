@@ -2,7 +2,7 @@
   <div class="bg-white border border-gray-200 rounded-lg p-4">
     <div class="flex justify-between items-center mb-4">
       <div>
-        <h3 class="text-base font-medium text-gray-900">Unresolved tickets</h3>
+        <h3 class="text-base font-medium text-gray-900">Resolved tickets</h3>
         <p class="text-xs text-gray-500">Across helpdesk</p>
       </div>
       <button
@@ -16,7 +16,7 @@
     <div v-if="groups.length > 0">
       <div class="grid grid-cols-2 gap-2 text-sm text-gray-500 mb-2">
         <span>Group</span>
-        <span class="text-right">Open</span>
+        <span class="text-right">Resolved</span>
       </div>
       <div
         v-for="group in groups"
@@ -30,7 +30,7 @@
 
     <div v-else class="flex flex-col items-center justify-center py-8 text-gray-400">
       <LucideCheckCircle class="w-8 h-8 mb-2" />
-      <span class="text-sm">All caught up! No unresolved tickets</span>
+      <span class="text-sm">No resolved tickets</span>
     </div>
   </div>
 </template>
@@ -39,13 +39,13 @@
 import { useRouter } from "vue-router";
 import LucideCheckCircle from "~icons/lucide/check-circle";
 
-interface UnresolvedGroup {
+interface ResolvedGroup {
   name: string;
   count: number;
 }
 
 interface Props {
-  groups: UnresolvedGroup[];
+  groups: ResolvedGroup[];
 }
 
 defineProps<Props>();
@@ -55,7 +55,7 @@ const router = useRouter();
 function handleViewDetails() {
   router.push({
     name: "TicketsAgent",
-    query: { filters: JSON.stringify({ status: ["in", ["Open"]] }) },
+    query: { filters: JSON.stringify({ status: ["in", ["Resolved"]] }) },
   });
 }
 </script>
