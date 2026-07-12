@@ -1098,28 +1098,109 @@ def get_satisfaction_data(filters: dict[str, any] = None) -> dict[str, any]:
     }
 
 
-@frappe.whitelist()
-@agent_only
-def get_monthly_group_report(months: int = 12) -> list[dict[str, any]]:
+def get_group_report_rows(
+    period: str, from_date, to_date=None
+) -> list[dict[str, any]]:
     """
-    Month-wise incoming ticket count, resolved and unresolved counts, by ticket type.
+    Period-wise (month or ISO week) incoming ticket count, resolved and
+    unresolved counts, by ticket type.
     """
-    months = min(int(months), 36)
-    from_date = frappe.utils.add_months(frappe.utils.nowdate(), -months)
+    # %x-W%v = ISO year/week (Mon-Sun), matching the frontend week picker
+    # (%% because the query goes through parameterized frappe.db.sql)
+    fmt = "%%x-W%%v" if period == "weekly" else "%%Y-%%m"
+    conditions = "creation >= %(from_date)s"
+    if to_date:
+        conditions += " AND creation < %(to_date)s"
 
     return frappe.db.sql(
-        """
+        f"""
         SELECT
-            DATE_FORMAT(creation, '%%Y-%%m') AS month,
+            DATE_FORMAT(creation, '{fmt}') AS month,
             COALESCE(NULLIF(ticket_type, ''), 'Unspecified') AS ticket_type,
             COUNT(*) AS total,
             SUM(CASE WHEN resolution_date IS NOT NULL THEN 1 ELSE 0 END) AS resolved,
             SUM(CASE WHEN resolution_date IS NULL THEN 1 ELSE 0 END) AS unresolved
         FROM `tabHD Ticket`
-        WHERE creation >= %(from_date)s
+        WHERE {conditions}
         GROUP BY month, ticket_type
         ORDER BY month DESC, total DESC
         """,
-        {"from_date": from_date},
+        {"from_date": from_date, "to_date": to_date},
         as_dict=True,
     )
+
+
+@frappe.whitelist()
+@agent_only
+def get_monthly_group_report(
+    months: int = 12, period: str = "monthly", weeks: int = 12
+) -> list[dict[str, any]]:
+    """
+    Grouped ticket report. period="monthly": last `months` months grouped
+    by month. period="weekly": last `weeks` ISO weeks grouped by week.
+    """
+    if period == "weekly":
+        weeks = min(int(weeks), 104)
+        from_date = frappe.utils.add_days(frappe.utils.nowdate(), -weeks * 7)
+        return get_group_report_rows("weekly", from_date)
+
+    months = min(int(months), 36)
+    from_date = frappe.utils.add_months(frappe.utils.nowdate(), -months)
+    return get_group_report_rows("monthly", from_date)
+
+
+def group_report_to_table(rows: list[dict]) -> list[list]:
+    """Rows -> [header, ...data] for exports and email attachments."""
+    table = [["Period", "Type", "Incoming", "Resolved", "Unresolved", "Resolution rate"]]
+    for r in rows:
+        total, resolved = int(r.total), int(r.resolved)
+        rate = round(resolved / total * 100) if total else 0
+        table.append(
+            [r.month, r.ticket_type, total, resolved, int(r.unresolved), f"{rate}%"]
+        )
+    return table
+
+
+def group_report_html(rows: list[dict], title: str) -> str:
+    table = group_report_to_table(rows)
+    head = "".join(f"<th style='text-align:left;padding:4px 8px'>{c}</th>" for c in table[0])
+    body = "".join(
+        "<tr>" + "".join(f"<td style='padding:4px 8px'>{c}</td>" for c in row) + "</tr>"
+        for row in table[1:]
+    ) or "<tr><td colspan='6' style='padding:4px 8px'>No tickets found for this period.</td></tr>"
+    return f"""
+        <h3>{title}</h3>
+        <table border="1" style="border-collapse:collapse;font-size:13px">
+            <thead><tr>{head}</tr></thead><tbody>{body}</tbody>
+        </table>
+    """
+
+
+def build_group_report_file(rows: list[dict], file_format: str, title: str):
+    """Returns (fname, fcontent) for 'PDF' or 'Excel'."""
+    if file_format == "Excel":
+        from frappe.utils.xlsxutils import make_xlsx
+
+        return (
+            "helpdesk-report.xlsx",
+            make_xlsx(group_report_to_table(rows), "Helpdesk Report").getvalue(),
+        )
+    from frappe.utils.pdf import get_pdf
+
+    return "helpdesk-report.pdf", get_pdf(group_report_html(rows, title))
+
+
+@frappe.whitelist()
+@agent_only
+def download_group_report(
+    file_format: str = "Excel",
+    months: int = 12,
+    period: str = "monthly",
+    weeks: int = 12,
+):
+    rows = get_monthly_group_report(months=months, period=period, weeks=weeks)
+    title = f"Helpdesk Ticket Report ({period})"
+    fname, fcontent = build_group_report_file(rows, file_format, title)
+    frappe.local.response.filename = fname
+    frappe.local.response.filecontent = fcontent
+    frappe.local.response.type = "download"
