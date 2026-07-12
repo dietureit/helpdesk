@@ -37,6 +37,9 @@ scheduler_events = {
     "daily": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days"
     ],
+    "hourly": [
+        "helpdesk.helpdesk.doctype.hd_report_schedule.hd_report_schedule.send_scheduled_reports"
+    ],
 }
 
 

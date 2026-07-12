@@ -1,0 +1,108 @@
+{
+ "actions": [],
+ "autoname": "format:HD-RS-{#####}",
+ "creation": "2026-07-10 09:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "frequency",
+  "send_time",
+  "attach_format",
+  "column_break_main",
+  "recipients",
+  "cc",
+  "last_sent_at"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "Monthly",
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "label": "Frequency",
+   "options": "Daily\nWeekly\nMonthly",
+   "reqd": 1
+  },
+  {
+   "default": "09:00:00",
+   "fieldname": "send_time",
+   "fieldtype": "Time",
+   "label": "Send Time",
+   "reqd": 1
+  },
+  {
+   "default": "PDF",
+   "fieldname": "attach_format",
+   "fieldtype": "Select",
+   "label": "Attachment Format",
+   "options": "PDF\nExcel\nBoth",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Comma separated email addresses",
+   "fieldname": "recipients",
+   "fieldtype": "Small Text",
+   "label": "Recipients (To)",
+   "reqd": 1
+  },
+  {
+   "description": "Comma separated email addresses",
+   "fieldname": "cc",
+   "fieldtype": "Small Text",
+   "label": "CC"
+  },
+  {
+   "fieldname": "last_sent_at",
+   "fieldtype": "Datetime",
+   "label": "Last Sent At",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-10 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD Report Schedule",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
