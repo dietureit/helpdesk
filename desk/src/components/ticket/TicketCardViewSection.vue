@@ -3,7 +3,7 @@
     <div class="flex-1">
       <div class="rounded-xl bg-surface-white p-4">
         <div
-          v-if="!loading && totalCount > 0"
+          v-if="!loading"
           class="sticky top-0 z-30 mb-4 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-outline-gray-2 bg-surface-white px-5 py-3 shadow-[0_8px_18px_rgba(0,0,0,0.05)]"
         >
           <div class="flex flex-wrap items-center gap-3">
@@ -20,7 +20,10 @@
             >
               {{ totalCount }}
             </span>
-            <div class="flex items-center gap-2 text-sm text-ink-gray-8">
+            <div
+              v-if="totalCount > 0"
+              class="flex items-center gap-2 text-sm text-ink-gray-8"
+            >
               <span class="font-semibold text-ink-gray-9">{{ pageStart }}</span>
               <span class="text-ink-gray-4">-</span>
               <span class="font-semibold text-ink-gray-9">{{ pageEnd }}</span>
@@ -30,48 +33,57 @@
           </div>
 
           <div class="flex items-center gap-4">
-            <div class="flex items-center gap-2.5">
-              <span class="text-sm font-semibold text-ink-gray-7">Show</span>
-              <Dropdown :options="pageLengthOptions" placement="bottom-end">
-                <template #default="{ open }">
-                  <button
-                    type="button"
-                    class="flex h-9 items-center gap-2 rounded-lg border border-outline-gray-3 bg-surface-white px-3 text-sm font-semibold text-ink-gray-9 transition-all hover:-translate-y-0.5 hover:border-outline-gray-4 hover:bg-surface-gray-1 focus:-translate-y-0.5 focus:border-outline-gray-4 focus:outline-none focus:ring-2 focus:ring-outline-gray-3"
-                    aria-label="Select results per page"
-                  >
-                    <span>{{ pageLengthCount }}</span>
-                    <LucideChevronDown
-                      class="h-4 w-4 text-ink-gray-5 transition-transform"
-                      :class="open ? 'rotate-180' : ''"
-                    />
-                  </button>
+            <RouterLink :to="{ name: createTicketRoute }">
+              <Button label="Create" theme="gray" variant="solid">
+                <template #prefix>
+                  <LucidePlus class="h-4 w-4" />
                 </template>
-              </Dropdown>
-            </div>
-            <div class="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                theme="gray"
-                class="h-9 w-9 rounded-lg border border-outline-gray-3 bg-surface-white transition-transform hover:-translate-y-0.5 hover:bg-surface-gray-1"
-                :disabled="pageStart <= 1 || loading"
-                @click="emit('prev-page')"
-                aria-label="Previous page"
-              >
-                <LucideChevronLeft class="h-4 w-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                theme="gray"
-                class="h-9 w-9 rounded-lg border border-outline-gray-3 bg-surface-white transition-transform hover:-translate-y-0.5 hover:bg-surface-gray-1"
-                :disabled="currentCount >= totalCount || loading"
-                @click="emit('next-page')"
-                aria-label="Next page"
-              >
-                <LucideChevronRight class="h-4 w-4" />
-              </Button>
-            </div>
+            </RouterLink>
+            <template v-if="totalCount > 0">
+              <div class="flex items-center gap-2.5">
+                <span class="text-sm font-semibold text-ink-gray-7">Show</span>
+                <Dropdown :options="pageLengthOptions" placement="bottom-end">
+                  <template #default="{ open }">
+                    <button
+                      type="button"
+                      class="flex h-9 items-center gap-2 rounded-lg border border-outline-gray-3 bg-surface-white px-3 text-sm font-semibold text-ink-gray-9 transition-all hover:-translate-y-0.5 hover:border-outline-gray-4 hover:bg-surface-gray-1 focus:-translate-y-0.5 focus:border-outline-gray-4 focus:outline-none focus:ring-2 focus:ring-outline-gray-3"
+                      aria-label="Select results per page"
+                    >
+                      <span>{{ pageLengthCount }}</span>
+                      <LucideChevronDown
+                        class="h-4 w-4 text-ink-gray-5 transition-transform"
+                        :class="open ? 'rotate-180' : ''"
+                      />
+                    </button>
+                  </template>
+                </Dropdown>
+              </div>
+              <div class="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  theme="gray"
+                  class="h-9 w-9 rounded-lg border border-outline-gray-3 bg-surface-white transition-transform hover:-translate-y-0.5 hover:bg-surface-gray-1"
+                  :disabled="pageStart <= 1 || loading"
+                  @click="emit('prev-page')"
+                  aria-label="Previous page"
+                >
+                  <LucideChevronLeft class="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  theme="gray"
+                  class="h-9 w-9 rounded-lg border border-outline-gray-3 bg-surface-white transition-transform hover:-translate-y-0.5 hover:bg-surface-gray-1"
+                  :disabled="currentCount >= totalCount || loading"
+                  @click="emit('next-page')"
+                  aria-label="Next page"
+                >
+                  <LucideChevronRight class="h-4 w-4" />
+                </Button>
+              </div>
+            </template>
           </div>
         </div>
         <TicketCardView
@@ -251,12 +263,15 @@
 <script setup lang="ts">
 import TicketCardView from "@/components/ticket/TicketCardView.vue";
 import SearchMultiSelect from "@/components/SearchMultiSelect.vue";
+import { isCustomerPortal } from "@/utils";
 import { Button, Dropdown } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
 import LucideFilter from "~icons/lucide/filter";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucidePlus from "~icons/lucide/plus";
 
 type CardFilters = {
   status: any[];
@@ -499,4 +514,8 @@ const quickViewLabel = computed(() => {
   if (label && label !== "All") return `${label} tickets`;
   return "All tickets";
 });
+
+const createTicketRoute = computed(() =>
+  isCustomerPortal.value ? "TicketNew" : "TicketAgentNew"
+);
 </script>
