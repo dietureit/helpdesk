@@ -6,9 +6,9 @@
       </template>
     </LayoutHeader>
 
-    <div class="p-5 w-full overflow-y-auto flex-1">
+    <div class="flex-1 w-full p-5 overflow-y-auto">
       <!-- Filters -->
-      <div class="mb-4 flex items-center gap-4 overflow-x-auto">
+      <div class="flex items-center gap-4 mb-4 overflow-x-auto">
         <Dropdown
           v-if="!showDatePicker"
           :options="options"
@@ -22,10 +22,10 @@
               class="flex justify-between !w-48 items-center border border-gray-200 rounded-lg bg-white text-gray-700 px-3 py-2 hover:border-gray-300 hover:shadow-sm transition-colors cursor-pointer"
             >
               <div class="flex items-center">
-                <LucideCalendar class="size-4 text-gray-400 mr-2" />
+                <LucideCalendar class="mr-2 text-gray-400 size-4" />
                 <span class="text-sm">{{ preset }}</span>
               </div>
-              <LucideChevronDown class="size-4 text-gray-400" />
+              <LucideChevronDown class="text-gray-400 size-4" />
             </div>
           </template>
         </Dropdown>
@@ -40,12 +40,12 @@
           :formatter="formatRange"
         >
           <template #prefix>
-            <LucideCalendar class="size-4 text-gray-400 mr-2" />
+            <LucideCalendar class="mr-2 text-gray-400 size-4" />
           </template>
         </DateRangePicker>
         <Link
           v-if="isManager"
-          class="form-control w-48"
+          class="w-48 form-control"
           doctype="HD Team"
           placeholder="Team"
           v-model="filters.team"
@@ -53,12 +53,12 @@
           :hide-me="true"
         >
           <template #prefix>
-            <LucideUsers class="size-4 text-gray-400 mr-2" />
+            <LucideUsers class="mr-2 text-gray-400 size-4" />
           </template>
         </Link>
         <Link
           v-if="isManager"
-          class="form-control w-48"
+          class="w-48 form-control"
           doctype="HD Agent"
           placeholder="Agent"
           v-model="filters.agent"
@@ -67,12 +67,12 @@
           :hide-me="true"
         >
           <template #prefix>
-            <LucideUser class="size-4 text-gray-400 mr-2" />
+            <LucideUser class="mr-2 text-gray-400 size-4" />
           </template>
         </Link>
         <Link
           v-if="isManager"
-          class="form-control w-48"
+          class="w-48 form-control"
           doctype="User"
           placeholder="Owner"
           v-model="filters.owner"
@@ -80,13 +80,13 @@
           :hide-me="true"
         >
           <template #prefix>
-            <LucideUser class="size-4 text-gray-400 mr-2" />
+            <LucideUser class="mr-2 text-gray-400 size-4" />
           </template>
         </Link>
       </div>
 
       <!-- Status Cards Row -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div class="grid grid-cols-2 gap-4 mb-4 md:grid-cols-4">
         <StatusCard
           v-for="card in statusCards.data || []"
           :key="card.label"
@@ -104,16 +104,16 @@
           <div
             v-for="i in 4"
             :key="i"
-            class="bg-white border border-gray-200 rounded-lg p-4 animate-pulse"
+            class="p-4 bg-white border border-gray-200 rounded-lg animate-pulse"
           >
-            <div class="h-4 bg-gray-200 rounded w-20 mb-2"></div>
-            <div class="h-8 bg-gray-200 rounded w-12"></div>
+            <div class="w-20 h-4 mb-2 bg-gray-200 rounded"></div>
+            <div class="w-12 h-8 bg-gray-200 rounded"></div>
           </div>
         </template>
       </div>
 
       <!-- Today's Trends Section -->
-      <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+      <div class="p-4 mb-4 bg-white border border-gray-200 rounded-lg">
         <TrendChartSection
           v-if="!trendData.loading && trendData.data"
           :today-data="trendData.data?.today || []"
@@ -126,15 +126,15 @@
       </div>
 
       <!-- Bottom Row: Unresolved, Undelivered Emails, Status Breakdown -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
         <!-- Unresolved Tickets -->
         <UnresolvedSection
           :groups="unresolvedData.data || []"
         />
 
         <!-- Undelivered Emails (placeholder) -->
-        <div class="bg-white border border-gray-200 rounded-lg p-4">
-          <div class="flex justify-between items-center mb-4">
+        <div class="p-4 bg-white border border-gray-200 rounded-lg">
+          <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="text-base font-medium text-gray-900">Undelivered emails</h3>
               <p class="text-xs text-gray-500">Across helpdesk</p>
@@ -153,6 +153,11 @@
         <StatusBreakdownSection
           :breakdown="statusBreakdown"
           :loading="statusCards.loading"
+        />
+
+        <!-- Resolved Tickets -->
+        <ResolvedSection
+          :groups="resolvedData.data || []"
         />
       </div>
     </div>
@@ -180,6 +185,7 @@ import {
   StatusCard,
   TrendChartSection,
   UnresolvedSection,
+  ResolvedSection,
   StatusBreakdownSection,
 } from "./components";
 
@@ -225,7 +231,15 @@ const unresolvedData = createResource({
   },
 });
 
-const agentFilter = ref(null);
+const resolvedData = createResource({
+  url: "helpdesk.api.dashboard.get_resolved_grouped_data",
+  cache: ["Dashboard", "ResolvedData"],
+  params: {
+    filters: getApiFilters(),
+  },
+});
+
+const agentFilter = ref<{ name: [string, string[]] } | null>(null);
 const teamMembers = createResource({
   url: "helpdesk.helpdesk.doctype.hd_team.hd_team.get_team_members",
   cache: ["Dashboard", "TeamMembers"],
@@ -272,10 +286,13 @@ function reloadAllResources() {
 
   unresolvedData.update({ params: { filters: apiFilters } });
   unresolvedData.reload();
+
+  resolvedData.update({ params: { filters: apiFilters } });
+  resolvedData.reload();
 }
 
 const statusBreakdown = computed(() => {
-  const cards = statusCards.data || [];
+  const cards: { label: string; count: number }[] = statusCards.data || [];
   const getCount = (label: string) => {
     const byLabel = cards.find((card) => card.label === label);
     return byLabel && typeof byLabel.count === "number" ? byLabel.count : 0;
@@ -297,7 +314,7 @@ function getLastXDays(range: number = 30): string {
 }
 
 const showDatePicker = ref(false);
-const datePickerRef = ref(null);
+const datePickerRef = ref<{ open: () => void } | null>(null);
 const preset = ref("This Year");
 
 const options = computed(() => [
@@ -320,7 +337,7 @@ const options = computed(() => [
       showDatePicker.value = true;
       setTimeout(() => datePickerRef.value?.open(), 0);
       preset.value = "Custom Range";
-      filters.period = null;
+      filters.period = "";
     },
   },
 ]);

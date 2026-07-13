@@ -1,3 +1,4 @@
+import LucideBarChart2 from "~icons/lucide/bar-chart-2";
 import LucideBookOpen from "~icons/lucide/book-open";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
@@ -8,6 +9,11 @@ export const agentPortalSidebarOptions = [
     label: "Tickets",
     icon: LucideTicket,
     to: "TicketsAgent",
+  },
+  {
+    label: "Monthly Report",
+    icon: LucideBarChart2,
+    to: "MonthlyReport",
   },
   {
     label: "Contacts",

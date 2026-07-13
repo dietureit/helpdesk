@@ -159,6 +159,28 @@
       <div class="space-y-3">
         <div class="space-y-1.5">
           <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
+            Ticket Filter
+          </label>
+          <div class="relative">
+            <select
+              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
+              :value="selectedTicketTypeValue"
+              @change="handleTicketTypeChange"
+            >
+              <option value="">--</option>
+              <option
+                v-for="option in ticketTypeFilterOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
             Status
           </label>
           <div class="relative">
@@ -279,6 +301,7 @@ type CardFilters = {
   team: any[];
   agent: any[];
   owner: any[];
+  ticketType: any[];
 };
 
 type FilterOption = {
@@ -313,6 +336,7 @@ const props = withDefaults(
     teamFilterOptions?: FilterOption[];
     agentFilterOptions?: FilterOption[];
     ownerFilterOptions?: FilterOption[];
+    ticketTypeFilterOptions?: FilterOption[];
     filters: CardFilters;
     search?: string;
     quickViews: QuickView[];
@@ -333,12 +357,14 @@ const props = withDefaults(
     teamFilterOptions: () => [],
     agentFilterOptions: () => [],
     ownerFilterOptions: () => [],
+    ticketTypeFilterOptions: () => [],
     filters: () => ({
       status: [],
       priority: [],
       team: [],
       agent: [],
       owner: [],
+      ticketType: [],
     }),
     search: "",
     quickViews: () => [],
@@ -384,6 +410,19 @@ const resolvedAt = computed({
   },
 });
 
+const selectedTicketTypeValue = computed(() => {
+  const first = props.filters.ticketType?.[0];
+  if (!first) return "";
+  if (typeof first === "string") return first;
+  return first?.value || "";
+});
+
+function handleTicketTypeChange(event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  const value = target?.value || "";
+  updateFilter("ticketType", value || null);
+}
+
 const dateOptions = [
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
@@ -417,6 +456,7 @@ function updateFilter(key: keyof CardFilters, value: any) {
     team: props.teamFilterOptions || [],
     agent: props.agentFilterOptions || [],
     owner: props.ownerFilterOptions || [],
+    ticketType: props.ticketTypeFilterOptions || [],
   };
 
   const normalize = (v: any) => {

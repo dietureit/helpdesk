@@ -7,7 +7,7 @@
         <Button
           ref="sendEmailRef"
           variant="ghost"
-          label="Reply"
+          label="Reply to mail"
           :class="[showEmailBox ? '!bg-gray-300 hover:!bg-gray-200' : '']"
           @click="toggleEmailBox()"
         >
