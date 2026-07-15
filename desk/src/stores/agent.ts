@@ -5,7 +5,7 @@ import { createListResource } from "frappe-ui";
 export const useAgentStore = defineStore("agent", () => {
   const agents = createListResource({
     doctype: "HD Agent",
-    fields: ["name", "agent_name", "user", "user.user_image"],
+    fields: ["name", "agent_name", "user", "user_image"],
     filters: { is_active: 1 },
     pageLength: 99999,
   });
