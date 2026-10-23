@@ -7,6 +7,9 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Avg, Count, Function
 from pypika import Case
 
+from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings import (
+    get_settings as get_internal_sla_settings,
+)
 from helpdesk.utils import agent_only, is_dashboard_manager, is_version_16
 
 HD_TICKET = "HD Ticket"
@@ -1204,3 +1207,55 @@ def download_group_report(
     frappe.local.response.filename = fname
     frappe.local.response.filecontent = fcontent
     frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+@agent_only
+def get_internal_sla_data(filters: dict[str, any] = None) -> dict[str, any]:
+    """Internal SLA counts, plus the open investigations that are at risk or breached."""
+    user = frappe.session.user
+    filters = filters or {}
+    if not is_dashboard_manager(user) and (
+        filters.get("team")
+        or filters.get("agent") not in (None, user, "@me")
+        or filters.get("owner") not in (None, user, "@me")
+    ):
+        frappe.throw(
+            _("You are not allowed to view this dashboard data."),
+            frappe.PermissionError,
+        )
+
+    base_filters = {"internal_sla_status": ["is", "set"]}
+    if filters.get("from_date") and filters.get("to_date"):
+        base_filters["creation"] = ["between", [filters["from_date"], filters["to_date"]]]
+    if filters.get("team"):
+        base_filters["agent_group"] = filters["team"]
+    if filters.get("agent"):
+        agent = user if filters["agent"] == "@me" else filters["agent"]
+        base_filters["_assign"] = ["like", f'%"{agent}"%']
+    if filters.get("owner"):
+        base_filters["owner"] = user if filters["owner"] == "@me" else filters["owner"]
+
+    # get_list, unlike get_all, applies the agent's team restrictions to the ticket rows
+    counts = frappe.get_list(
+        HD_TICKET,
+        fields=["internal_sla_status as status", COUNT_NAME],
+        filters=base_filters,
+        group_by="internal_sla_status",
+    )
+    tickets = frappe.get_list(
+        HD_TICKET,
+        fields=["name", "subject", "agent_group", "internal_sla_tier", "internal_sla_status", "internal_sla_due_by", "_assign"],
+        filters={
+            **base_filters,
+            "internal_sla_status": ["in", ["At Risk", "Breached"]],
+            "investigation_status": "Open",
+        },
+        order_by="internal_sla_due_by asc",
+        limit=50,
+    )
+    return {
+        "enabled": get_internal_sla_settings().enabled,
+        "counts": {row.status: row.count for row in counts},
+        "tickets": tickets,
+    }

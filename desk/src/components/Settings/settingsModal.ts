@@ -3,6 +3,7 @@ import Agents from "./Agents.vue";
 import EmailConfig from "./EmailConfig.vue";
 import TeamsConfig from "./Teams/TeamsConfig.vue";
 import Sla from "./Sla/Sla.vue";
+import InternalSla from "./InternalSla/InternalSla.vue";
 import HolidayList from "./Holiday/Holiday.vue";
 import FieldDependencyConfig from "./FieldDependency/FieldDependencyConfig.vue";
 import InviteAgents from "./InviteAgents.vue";
@@ -13,6 +14,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideUsers from "~icons/lucide/users";
 import ShieldCheck from "~icons/lucide/shield-check";
 import Briefcase from "~icons/lucide/briefcase";
+import LucideTimer from "~icons/lucide/timer";
 import AssignmentRules from "./Assignment Rules/AssignmentRules.vue";
 import Settings from "~icons/lucide/settings-2";
 import { FieldDependencyIcon, PhoneIcon } from "@/components/icons";
@@ -96,6 +98,12 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("Internal SLA"),
+          icon: markRaw(LucideTimer),
+          component: markRaw(InternalSla),
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
           label: __("Business Holidays"),
           icon: markRaw(Briefcase),
           component: markRaw(HolidayList),
@@ -161,6 +169,7 @@ type TabName =
   | "Invite Agents"
   | "Teams"
   | "SLA Policies"
+  | "Internal SLA"
   | "Business Holidays"
   | "Assignment Rules"
   | "Field Dependencies"

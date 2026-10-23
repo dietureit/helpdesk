@@ -45,7 +45,7 @@ export interface HDTicketStatus extends DocType {
   parsed_color?: string;
 }
 
-// Last updated: 2025-12-14 22:54:35.101089
+// Last updated: 2026-10-22 18:00:00.000000
 export interface HDTicket extends DocType {
   /** Subject: Data */
   subject: string;
@@ -79,6 +79,18 @@ export interface HDTicket extends DocType {
   on_hold_since?: string;
   /** Total Hold Time: Duration */
   total_hold_time?: any;
+  /** Investigation Status: Select */
+  investigation_status?: '' | 'Open' | 'Resolved';
+  /** Investigation Resolved On: Datetime */
+  investigation_resolved_on?: string;
+  /** Internal SLA Tier: Data */
+  internal_sla_tier?: string;
+  /** Internal SLA Status: Select */
+  internal_sla_status?: '' | 'On Track' | 'At Risk' | 'Breached' | 'Met';
+  /** Internal SLA Warning By: Datetime */
+  internal_sla_warning_by?: string;
+  /** Internal SLA Due By: Datetime */
+  internal_sla_due_by?: string;
   /** First Response Time: Duration */
   first_response_time?: any;
   /** First Responded On: Datetime */

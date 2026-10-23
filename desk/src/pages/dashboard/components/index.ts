@@ -4,3 +4,4 @@ export { default as SummaryMetric } from "./SummaryMetric.vue";
 export { default as UnresolvedSection } from "./UnresolvedSection.vue";
 export { default as ResolvedSection } from "./ResolvedSection.vue";
 export { default as StatusBreakdownSection } from "./StatusBreakdownSection.vue";
+export { default as InternalSlaSection } from "./InternalSlaSection.vue";

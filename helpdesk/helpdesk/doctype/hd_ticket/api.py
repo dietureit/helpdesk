@@ -11,6 +11,9 @@ from pypika import Criterion, Order
 from helpdesk.api.doc import handle_at_me_support
 from helpdesk.consts import DEFAULT_TICKET_TEMPLATE
 from helpdesk.helpdesk.doctype.hd_form_script.hd_form_script import get_form_script
+from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings import (
+    TICKET_FIELDS as INTERNAL_SLA_FIELDS,
+)
 from helpdesk.helpdesk.doctype.hd_ticket_template.api import get_fields_meta
 from helpdesk.helpdesk.doctype.hd_ticket_template.api import get_one as get_template
 from helpdesk.utils import (
@@ -54,6 +57,10 @@ def get_one(name, is_customer_portal=False):
     if not len(ticket):
         frappe.throw(_("Ticket not found"), frappe.DoesNotExistError)
     ticket = ticket.pop()
+    if not _is_agent:
+        # the internal SLA is not for customers
+        for field in INTERNAL_SLA_FIELDS:
+            ticket.pop(field, None)
 
     contact = (
         frappe.qb.from_(QBContact)
@@ -125,7 +132,7 @@ def get_one(name, is_customer_portal=False):
 
 
 def get_meta(template: str):
-    default_fields = ["ticket_type", "agent_group", "priority", "customer"]
+    default_fields = ["ticket_type", "agent_group", "priority", "customer", "investigation_status"]
     DocField = frappe.qb.DocType("DocField")
 
     fields = (

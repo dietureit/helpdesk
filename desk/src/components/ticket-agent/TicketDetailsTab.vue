@@ -32,6 +32,31 @@
               (val:string) => handleFieldUpdate(field.fieldname, val,true)
             "
             />
+            <!-- not locked by isTicketResolved: departments investigate after the agent resolves -->
+            <FormControl
+              v-if="field.fieldname === 'status'"
+              type="select"
+              class="form-control-core mt-3"
+              :label="__('Investigation Status')"
+              placeholder="—"
+              :options="['Open', 'Resolved']"
+              :model-value="ticket.doc.investigation_status || ''"
+              @update:model-value="
+                (val: string) => handleFieldUpdate('investigation_status', val, true)
+              "
+            />
+            <FormControl
+              v-if="field.fieldname === 'agent_group' && showTierPicker"
+              type="select"
+              class="form-control-core mt-3"
+              :label="__('Internal SLA Tier')"
+              :options="tierOptions"
+              :model-value="ticket.doc.internal_sla_tier || NO_TIER"
+              @update:model-value="
+                (val: string) =>
+                  handleFieldUpdate('internal_sla_tier', val === NO_TIER ? '' : val, true)
+              "
+            />
           </template>
         </div>
 
@@ -84,7 +109,7 @@ import {
   TicketSymbol,
 } from "@/types";
 import { computed, inject, ref, watch } from "vue";
-import { FormControl } from "frappe-ui";
+import { createResource, FormControl } from "frappe-ui";
 import TicketField from "../TicketField.vue";
 import AssignTo from "./AssignTo.vue";
 import TicketContact from "./TicketContact.vue";
@@ -131,6 +156,31 @@ watch(
   { immediate: true }
 );
 
+const internalSlaOptions = createResource({
+  url: "helpdesk.api.internal_sla.get_options",
+  cache: "InternalSlaOptions",
+  auto: true,
+});
+
+const showTierPicker = computed(
+  () =>
+    Boolean(internalSlaOptions.data?.enabled) &&
+    Boolean(ticket.value.doc.investigation_status)
+);
+
+// frappe-ui's select drops options with an empty value
+const NO_TIER = "__none__";
+
+const tierOptions = computed(() => {
+  const tiers: string[] = [...(internalSlaOptions.data?.tiers || [])];
+  const current = ticket.value.doc.internal_sla_tier;
+  if (current && !tiers.includes(current)) tiers.push(current); // renamed or removed in settings
+  return [
+    { label: "No internal SLA", value: NO_TIER },
+    ...tiers.map((tier) => ({ label: tier, value: tier })),
+  ];
+});
+
 // ticket_type, priority, status, customer, agent_group
 const coreFields = computed(() => {
   // TODO: to confirm whether customizations should apply to core fields as well
@@ -176,6 +226,8 @@ const customFields = computed(() => {
     "agent_group",
     "subject",
     "status",
+    "investigation_status",
+    "internal_sla_tier",
   ];
   customFields = customFields.filter((f) => !_coreFields.includes(f.fieldname));
   let _customFields = customFields.map((f) => {

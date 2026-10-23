@@ -34,7 +34,13 @@
     >
       <UserAvatar :name="n.user_from" />
       <div>
-        <div class="mb-2 leading-5">
+        <div
+          v-if="n.notification_type === 'SLA Alert'"
+          class="mb-2 leading-5 text-gray-700"
+        >
+          {{ n.message }}
+        </div>
+        <div v-else class="mb-2 leading-5">
           <span class="space-x-1 text-gray-700">
             <span class="font-medium text-gray-900">{{ n.user_from }}</span>
             <span v-if="n.notification_type === 'Mention'"
@@ -101,8 +107,7 @@ function getRoute(n: Notification) {
         },
         hash: "#" + n.reference_comment,
       };
-    case "Assignment":
-    case "Reaction":
+    default:
       return {
         name: "TicketAgent",
         params: {

@@ -13,7 +13,7 @@
               <LucideFilter class="h-4 w-4 text-ink-gray-7" />
             </div>
             <span class="text-base font-semibold text-ink-gray-9">
-              {{ quickViewLabel }}
+              {{ listLabel }}
             </span>
             <span
               class="rounded-full bg-surface-gray-9 px-2.5 py-1 text-xs font-semibold leading-none text-ink-white"
@@ -33,6 +33,15 @@
           </div>
 
           <div class="flex items-center gap-4">
+            <Button
+              class="lg:hidden"
+              :label="showFilters ? 'Hide filters' : 'Filters'"
+              @click="showFilters = !showFilters"
+            >
+              <template #prefix>
+                <LucideFilter class="h-4 w-4" />
+              </template>
+            </Button>
             <RouterLink :to="{ name: createTicketRoute }">
               <Button label="Create" theme="gray" variant="solid">
                 <template #prefix>
@@ -40,6 +49,17 @@
                 </template>
               </Button>
             </RouterLink>
+            <Button
+              v-if="!isCustomerPortal"
+              label="Export"
+              :disabled="!totalCount"
+              :title="`Download the ${totalCount} matching tickets as Excel`"
+              @click="emit('export')"
+            >
+              <template #prefix>
+                <LucideDownload class="h-4 w-4" />
+              </template>
+            </Button>
             <template v-if="totalCount > 0">
               <div class="flex items-center gap-2.5">
                 <span class="text-sm font-semibold text-ink-gray-7">Show</span>
@@ -107,8 +127,10 @@
       aria-hidden="true"
     ></div>
 
+
     <div
-      class="hidden lg:flex w-72 shrink-0 flex-col gap-4 bg-surface-white p-4 h-fit sticky top-4"
+      :class="showFilters ? 'flex' : 'hidden lg:flex'"
+      class="order-first w-full shrink-0 flex-col gap-4 bg-surface-white p-4 h-fit lg:order-none lg:w-72 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto"
     >
       <div class="flex items-center justify-between">
         <span class="font-['Poppins'] text-[14px] font-normal leading-[21px] text-ink-gray-9">
@@ -117,8 +139,55 @@
         <button
           type="button"
           class="font-['Poppins'] text-[12px] font-medium leading-[18px] text-ink-gray-9 transition-colors hover:text-ink-gray-8"
+          :aria-expanded="showApplied"
+          @click="showApplied = !showApplied"
         >
-          Show Applied Filters
+          {{ showApplied ? "Hide Applied Filters" : "Show Applied Filters" }}
+          <span v-if="appliedCount">({{ appliedCount }})</span>
+        </button>
+      </div>
+
+      <div v-if="showApplied" class="flex flex-wrap items-center gap-1.5">
+        <span
+          v-for="chip in appliedChips"
+          :key="chip.key"
+          class="inline-flex items-center gap-1 rounded bg-surface-gray-2 py-0.5 pl-2 pr-1 text-[12px] leading-[18px] text-ink-gray-8"
+        >
+          {{ chip.label }}: {{ chip.value }}
+          <button
+            type="button"
+            class="rounded p-0.5 hover:bg-surface-gray-3"
+            :aria-label="`Remove ${chip.label} filter`"
+            @click="emit('update-filter', chip.key, '')"
+          >
+            <LucideX class="h-3 w-3" />
+          </button>
+        </span>
+        <span
+          v-if="hasLeftovers"
+          class="inline-flex items-center gap-1 rounded bg-surface-gray-2 py-0.5 pl-2 pr-1 text-[12px] leading-[18px] text-ink-gray-8"
+          :title="JSON.stringify(leftovers)"
+        >
+          Dashboard filter
+          <button
+            type="button"
+            class="rounded p-0.5 hover:bg-surface-gray-3"
+            aria-label="Remove dashboard filter"
+            @click="emit('remove-leftovers')"
+          >
+            <LucideX class="h-3 w-3" />
+          </button>
+        </span>
+        <span v-if="!appliedCount" class="text-[12px] text-ink-gray-5">
+          No filters applied
+        </span>
+        <button
+          v-else
+          type="button"
+          class="text-[12px] font-medium text-ink-gray-7 underline hover:text-ink-gray-9"
+          @click="clearAll"
+        >
+          Clear all
         </button>
       </div>
 
@@ -151,131 +220,73 @@
           id="ticket-filter-search"
           v-model="searchQuery"
           type="text"
-          placeholder="Search"
+          placeholder="Search ticket, subject, customer or phone"
           class="h-[35px] w-full rounded border border-[#E4E4E4] bg-surface-white pl-8 pr-3 text-[12px] leading-[18px] text-ink-gray-9 placeholder-ink-gray-4 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
         />
       </div>
 
       <div class="space-y-3">
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Ticket Filter
+        <div v-for="filter in visibleFilters" :key="filter.key" class="space-y-1.5">
+          <label
+            :for="`ticket-filter-${filter.key}`"
+            class="text-[12px] font-normal leading-[18px] text-ink-gray-7"
+          >
+            {{ filter.label }}
           </label>
-          <div class="relative">
+          <template v-if="filter.date">
             <select
-              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
-              :value="selectedTicketTypeValue"
-              @change="handleTicketTypeChange"
+              :id="`ticket-filter-${filter.key}`"
+              :class="selectClass"
+              :value="dateChoice(filter.key)"
+              @change="setDate(filter.key, ($event.target as HTMLSelectElement).value)"
             >
               <option value="">--</option>
-              <option
-                v-for="option in ticketTypeFilterOptions"
-                :key="option.value"
-                :value="option.value"
+              <option v-for="preset in DATE_PRESETS" :key="preset.value" :value="preset.value">
+                {{ preset.label }}
+              </option>
+              <option :value="CUSTOM">Custom range…</option>
+            </select>
+            <DateRangePicker
+              v-if="dateChoice(filter.key) === CUSTOM"
+              class="mt-1.5"
+              variant="outline"
+              placeholder="Pick a date range"
+              :model-value="isDateRange(filterState[filter.key]) ? filterState[filter.key] : ''"
+              @update:model-value="(value: string) => emit('update-filter', filter.key, value || '')"
+            />
+          </template>
+          <select
+            v-else
+            :id="`ticket-filter-${filter.key}`"
+            :class="selectClass"
+            :value="filterState[filter.key] || ''"
+            @change="emit('update-filter', filter.key, ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">--</option>
+            <template v-if="filter.key === 'custom_sub_category'">
+              <optgroup
+                v-for="(options, group) in subCategoryGroups"
+                :key="group"
+                :label="String(group)"
               >
+                <option v-for="option in options" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </optgroup>
+            </template>
+            <template v-else>
+              <option v-for="option in optionsFor(filter)" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
-            </select>
-          </div>
+            </template>
+          </select>
         </div>
 
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Status
-          </label>
-          <div class="relative">
-            <select
-              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
-              :value="selectedStatusValue"
-              @change="handleStatusChange"
-            >
-              <option value="">--</option>
-              <option
-                v-for="option in statusSelectOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Owner
-          </label>
-          <SearchMultiSelect
-            :options="ownerFilterOptions"
-            :model-value="selectedOwnerArray"
-            placeholder="Select owner"
-            selection-text="owners"
-            @update:modelValue="handleOwnerSelect"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Agents
-          </label>
-          <div class="relative">
-            <select
-              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
-              :value="selectedAgentValue"
-              @change="handleAgentChange"
-            >
-              <option value="">--</option>
-              <option
-                v-for="option in agentFilterOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Created At
-          </label>
-          <div class="relative">
-            <select
-              v-model="createdAt"
-              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
-            >
-              <option value="">--</option>
-              <option
-                v-for="option in dateOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
-            Resolved At
-          </label>
-          <div class="relative">
-            <select
-              v-model="resolvedAt"
-              class="h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2"
-            >
-              <option value="">--</option>
-              <option
-                v-for="option in dateOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
+        <div v-if="!isCustomerPortal" class="space-y-1.5">
+          <span class="text-[12px] font-normal leading-[18px] text-ink-gray-7">
+            More filters (any field)
+          </span>
+          <Filter />
         </div>
       </div>
     </div>
@@ -284,38 +295,26 @@
 
 <script setup lang="ts">
 import TicketCardView from "@/components/ticket/TicketCardView.vue";
-import SearchMultiSelect from "@/components/SearchMultiSelect.vue";
+import {
+  DATE_PRESETS,
+  FILTERS,
+  FilterDef,
+  FilterOption,
+  PanelState,
+  isDateRange,
+} from "@/components/ticket/ticketFilters";
+import Filter from "@/components/view-controls/Filter.vue";
 import { isCustomerPortal } from "@/utils";
-import { Button, Dropdown } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { Button, DateRangePicker, Dropdown } from "frappe-ui";
+import { computed, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import LucideFilter from "~icons/lucide/filter";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideDownload from "~icons/lucide/download";
 import LucidePlus from "~icons/lucide/plus";
-
-type CardFilters = {
-  status: any[];
-  priority: any[];
-  team: any[];
-  agent: any[];
-  owner: any[];
-  ticketType: any[];
-};
-
-type FilterOption = {
-  label: string;
-  value: string;
-  indicatorClass?: string;
-  category?: string;
-};
-
-type QuickView = {
-  label: string;
-  icon: any;
-  filters: Record<string, any>;
-};
+import LucideX from "~icons/lucide/x";
 
 const props = withDefaults(
   defineProps<{
@@ -331,18 +330,11 @@ const props = withDefaults(
       category?: string;
     }>;
     priorityOptions?: string[];
-    statusFilterOptions?: FilterOption[];
-    priorityFilterOptions?: FilterOption[];
-    teamFilterOptions?: FilterOption[];
-    agentFilterOptions?: FilterOption[];
-    ownerFilterOptions?: FilterOption[];
-    ticketTypeFilterOptions?: FilterOption[];
-    filters: CardFilters;
+    filterState?: PanelState;
+    filterOptions?: Record<string, FilterOption[]>;
+    leftovers?: Record<string, any>;
+    offset?: number;
     search?: string;
-    quickViews: QuickView[];
-    activeQuickView?: string;
-    createdAt?: string;
-    resolvedAt?: string;
   }>(),
   {
     rows: () => [],
@@ -352,25 +344,11 @@ const props = withDefaults(
     pageLengthCount: 20,
     statusOptions: () => [],
     priorityOptions: () => [],
-    statusFilterOptions: () => [],
-    priorityFilterOptions: () => [],
-    teamFilterOptions: () => [],
-    agentFilterOptions: () => [],
-    ownerFilterOptions: () => [],
-    ticketTypeFilterOptions: () => [],
-    filters: () => ({
-      status: [],
-      priority: [],
-      team: [],
-      agent: [],
-      owner: [],
-      ticketType: [],
-    }),
+    filterState: () => ({}),
+    filterOptions: () => ({}),
+    leftovers: () => ({}),
+    offset: 0,
     search: "",
-    quickViews: () => [],
-    activeQuickView: "",
-    createdAt: "",
-    resolvedAt: "",
   }
 );
 
@@ -381,54 +359,25 @@ const emit = defineEmits<{
   (e: "load-more"): void;
   (e: "next-page"): void;
   (e: "prev-page"): void;
-  (e: "update:filters", value: CardFilters): void;
-  (e: "apply-filters", value: CardFilters): void;
-  (e: "reset-filters"): void;
-  (e: "apply-quick-view", view: QuickView): void;
   (e: "update-limit", value: number): void;
   (e: "empty-action"): void;
   (e: "update:search", value: string): void;
-  (e: "update:created-at", value: string): void;
-  (e: "update:resolved-at", value: string): void;
-  (e: "apply-date-filters"): void;
+  (e: "update-filter", key: string, value: string): void;
+  (e: "clear-filters"): void;
+  (e: "remove-leftovers"): void;
+  (e: "export"): void;
 }>();
+
+const selectClass =
+  "h-[35px] w-full appearance-none rounded border border-[#E4E4E4] bg-surface-white px-3 pr-8 text-[12px] leading-[18px] text-ink-gray-9 focus:border-outline-gray-3 focus:outline-none focus:ring-2 focus:ring-outline-gray-2";
+const CUSTOM = "custom";
+
+const showFilters = ref(false); // below lg the panel sits behind the "Filters" button
+const showApplied = ref(false);
+const customDate = reactive<Record<string, boolean>>({});
 
 const searchQuery = ref(props.search || "");
 const syncingSearch = ref(false);
-const createdAt = computed({
-  get: () => props.createdAt || "",
-  set: (value: string) => {
-    emit("update:created-at", value);
-    emit("apply-date-filters");
-  },
-});
-const resolvedAt = computed({
-  get: () => props.resolvedAt || "",
-  set: (value: string) => {
-    emit("update:resolved-at", value);
-    emit("apply-date-filters");
-  },
-});
-
-const selectedTicketTypeValue = computed(() => {
-  const first = props.filters.ticketType?.[0];
-  if (!first) return "";
-  if (typeof first === "string") return first;
-  return first?.value || "";
-});
-
-function handleTicketTypeChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  const value = target?.value || "";
-  updateFilter("ticketType", value || null);
-}
-
-const dateOptions = [
-  { label: "Today", value: "today" },
-  { label: "Yesterday", value: "yesterday" },
-  { label: "This week", value: "this_week" },
-  { label: "This month", value: "this_month" },
-];
 
 watch(
   () => props.search,
@@ -449,90 +398,63 @@ watch(searchQuery, (value) => {
   emit("update:search", value);
 });
 
-function updateFilter(key: keyof CardFilters, value: any) {
-  const optionPool: Record<keyof CardFilters, FilterOption[]> = {
-    status: props.statusFilterOptions || [],
-    priority: props.priorityFilterOptions || [],
-    team: props.teamFilterOptions || [],
-    agent: props.agentFilterOptions || [],
-    owner: props.ownerFilterOptions || [],
-    ticketType: props.ticketTypeFilterOptions || [],
-  };
-
-  const normalize = (v: any) => {
-    const base = Array.isArray(v) ? v : v ? [v] : [];
-    return base
-      .filter(Boolean)
-      .map((item) => {
-        if (typeof item === "object" && item?.label && item?.value) return item;
-        const raw = typeof item === "object" && "value" in item ? item.value : item;
-        const match = (optionPool[key] || []).find((o) => o.value === raw);
-        const valueStr = raw ?? "";
-        return match || { label: String(valueStr), value: String(valueStr) };
-      })
-      .slice(0, 1);
-  };
-
-  const nextFilters = {
-    ...props.filters,
-    [key]: normalize(value),
-  };
-  emit("update:filters", nextFilters);
-  emit("apply-filters", nextFilters);
-}
-
-const statusSelectOptions = computed(() =>
-  (props.statusFilterOptions || []).filter((option) => option.value !== "")
+const visibleFilters = computed(() =>
+  FILTERS.filter((filter) => !(filter.agentOnly && isCustomerPortal.value))
 );
 
-const selectedStatusValue = computed(() => {
-  const first = props.filters.status?.[0];
-  if (!first) return "";
-  if (typeof first === "string") return first;
-  return first?.value || "";
-});
-
-function handleStatusChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  const value = target?.value ?? "";
-  const option = (props.statusFilterOptions || []).find(
-    (item) => item.value === value
-  );
-  updateFilter("status", option || value || null);
+function optionsFor(filter: FilterDef): FilterOption[] {
+  return filter.options || props.filterOptions[filter.key] || [];
 }
 
-const selectedAgentValue = computed(() => {
-  const first = props.filters.agent?.[0];
-  if (!first) return "";
-  if (typeof first === "string") return first;
-  return first?.value || "";
+// Sub-categories grouped by category; only the chosen category's when one is set
+const subCategoryGroups = computed(() => {
+  const groups: Record<string, FilterOption[]> = {};
+  const category = props.filterState.custom_category;
+  for (const option of props.filterOptions.custom_sub_category || []) {
+    if (category && option.group !== category) continue;
+    (groups[option.group || ""] ||= []).push(option);
+  }
+  return groups;
 });
 
-const selectedOwnerArray = computed(() => {
-  const first = props.filters.owner?.[0];
-  if (!first) return [];
-  if (typeof first === "string") return [first];
-  return [first?.value || ""].filter(Boolean);
-});
-
-function handleAgentChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  const value = target?.value || "";
-  updateFilter("agent", value || null);
+function dateChoice(key: string) {
+  const value = props.filterState[key];
+  return customDate[key] || isDateRange(value) ? CUSTOM : value || "";
 }
 
-function handleOwnerSelect(values: string[]) {
-  const value = values?.[0] || "";
-  updateFilter("owner", value || null);
+function setDate(key: string, value: string) {
+  customDate[key] = value === CUSTOM;
+  // a custom range is applied once both dates are picked
+  if (value !== CUSTOM) emit("update-filter", key, value);
 }
 
-const pageLength = computed(() => props.pageLengthCount || 20);
+function chipValue(filter: FilterDef) {
+  const value = props.filterState[filter.key];
+  if (filter.date) {
+    return isDateRange(value)
+      ? value.replace(",", " → ")
+      : DATE_PRESETS.find((preset) => preset.value === value)?.label || value;
+  }
+  return optionsFor(filter).find((option) => option.value === value)?.label || value;
+}
+
+const appliedChips = computed(() =>
+  visibleFilters.value
+    .filter((filter) => props.filterState[filter.key])
+    .map((filter) => ({ key: filter.key, label: filter.label, value: chipValue(filter) }))
+);
+const hasLeftovers = computed(() => Object.keys(props.leftovers).length > 0);
+const appliedCount = computed(
+  () => appliedChips.value.length + (hasLeftovers.value ? 1 : 0)
+);
+
+function clearAll() {
+  Object.keys(customDate).forEach((key) => delete customDate[key]);
+  emit("clear-filters");
+}
+
 const pageEnd = computed(() => Math.min(props.currentCount || 0, props.totalCount || 0));
-const pageStart = computed(() => {
-  if (!pageEnd.value) return 0;
-  const start = pageEnd.value - pageLength.value + 1;
-  return start < 1 ? 1 : start;
-});
+const pageStart = computed(() => (pageEnd.value ? props.offset + 1 : 0));
 
 const pageLengthOptions = computed(() =>
   [10, 20, 50, 100].map((value) => ({
@@ -541,19 +463,9 @@ const pageLengthOptions = computed(() =>
   }))
 );
 
-const statusLabel = computed(() => {
-  const first = props.filters.status?.[0];
-  if (!first) return "";
-  if (typeof first === "string") return first;
-  return first?.label || first?.value || "";
-});
-
-const quickViewLabel = computed(() => {
-  if (props.activeQuickView) return props.activeQuickView;
-  const label = statusLabel.value;
-  if (label && label !== "All") return `${label} tickets`;
-  return "All tickets";
-});
+const listLabel = computed(() =>
+  props.filterState.status ? `${props.filterState.status} tickets` : "All tickets"
+);
 
 const createTicketRoute = computed(() =>
   isCustomerPortal.value ? "TicketNew" : "TicketAgentNew"

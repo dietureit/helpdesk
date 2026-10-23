@@ -56,8 +56,8 @@ function handleClick() {
       // Special handling for "Today's Tickets" card:
       // ignore the dashboard period and filter strictly by today's date.
       delete combinedFilters.today;
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      combinedFilters.creation = ["between", [today, today]];
+      // the server resolves "today" in the site's timezone
+      combinedFilters.creation = ["timespan", "today"];
     } else {
       // Add date range filter if provided
       if (props.fromDate && props.toDate) {

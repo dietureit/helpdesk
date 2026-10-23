@@ -1,7 +1,11 @@
+import json
+
 import frappe
 from frappe import _
+from frappe.utils import get_timespan_date_range, now_datetime, nowdate
+from frappe.utils.xlsxutils import make_xlsx
 
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, is_agent
 
 
 def assign_ticket_to_agent(ticket_id, agent_id=None):
@@ -32,6 +36,127 @@ def bulk_assign_ticket_to_agent(ticket_ids, agent_id=None):
         return ticket_docs
 
 
+FILTER_OPERATORS = {"=", "!=", "<", ">", "<=", ">=", "like", "not like", "in", "not in", "between", "timespan", "is"}
+STANDARD_FILTER_FIELDS = {"name", "creation", "modified", "owner", "_assign"}
+# The customer portal shares this endpoint; customers may only filter on these.
+CUSTOMER_FILTER_FIELDS = {"name", "status", "priority", "ticket_type", "creation", "modified", "resolution_date"}
+SEARCH_FIELDS = (
+    "name",
+    "subject",
+    "raised_by",
+    "contact",
+    "customer",
+    "custom_customer_name",
+    "custom_customer_phone",
+    "custom_phone",
+    "custom_messenger_conversation",  # the conversation name contains the customer's name
+)
+
+
+def build_card_filters(raw_filters, agent):
+    """Check the card view's {field: value | [operator, operand]} filters and turn them into get_list filters."""
+    meta = frappe.get_meta("HD Ticket")
+    filters = []
+    if agent and raw_filters.get("overdue"):
+        # customer SLA: still open and past the resolution due time
+        open_statuses = frappe.get_all("HD Ticket Status", filters={"category": "Open"}, pluck="name")
+        filters += [["status", "in", open_statuses or ["Open"]], ["resolution_by", "<", now_datetime()]]
+    for field, value in raw_filters.items():
+        if field not in STANDARD_FILTER_FIELDS and not meta.has_field(field):
+            continue
+        if not agent and field not in CUSTOMER_FILTER_FIELDS:
+            continue
+        if isinstance(value, (list, tuple)):
+            if len(value) != 2 or str(value[0]).lower() not in FILTER_OPERATORS:
+                continue
+            operator, operand = str(value[0]).lower(), value[1]
+        else:
+            operator, operand = "=", value
+        if operator == "timespan" and not get_timespan_date_range(operand):
+            continue  # get_list would silently fall back to today
+        if operator == "between":
+            operand = operand.split(",") if isinstance(operand, str) else operand
+            if not isinstance(operand, (list, tuple)) or len(operand) != 2:
+                continue
+        if operator == "is" and operand not in ("set", "not set"):
+            continue
+        filters.append([field, operator, operand])
+    return filters
+
+
+def build_search_filters(raw_filters):
+    """`search` text as or_filters: LIKE on the ticket id, subject and customer fields."""
+    search_text = (raw_filters.get("search") or "").strip()
+    if not search_text:
+        return []
+    meta = frappe.get_meta("HD Ticket")
+    return [
+        [field, "like", f"%{search_text}%"]
+        for field in SEARCH_FIELDS
+        if field == "name" or meta.has_field(field)
+    ]
+
+
+# (field, column header) for the Excel export; fields missing on a site are skipped
+EXPORT_COLUMNS = (
+    ("name", "Ticket"),
+    ("subject", "Subject"),
+    ("status", "Status"),
+    ("investigation_status", "Investigation Status"),
+    ("priority", "Priority"),
+    ("ticket_type", "Ticket Type"),
+    ("custom_category", "Category"),
+    ("custom_sub_category", "Sub Category"),
+    ("agent_group", "Team"),
+    ("_assign", "Assigned To"),
+    ("owner", "Created By"),
+    ("raised_by", "Raised By"),
+    ("custom_customer_name", "Customer Name"),
+    ("custom_customer_phone", "Customer Phone"),
+    ("customer", "Customer"),
+    ("contact", "Contact"),
+    ("custom_messenger_conversation", "Messenger Conversation"),
+    ("creation", "Created On"),
+    ("first_responded_on", "First Responded On"),
+    ("resolution_date", "Resolved On"),
+    ("agreement_status", "Customer SLA"),
+    ("resolution_by", "Resolution Due By"),
+    ("internal_sla_tier", "Internal SLA Tier"),
+    ("internal_sla_status", "Internal SLA Status"),
+    ("internal_sla_due_by", "Internal SLA Due By"),
+    ("investigation_resolved_on", "Investigation Resolved On"),
+)
+
+
+@frappe.whitelist()
+@agent_only
+def export_tickets(filters=None):
+    """Excel file of every ticket matching the card view's filters and search (all pages)."""
+    filters = frappe.parse_json(filters) if filters else {}
+    meta = frappe.get_meta("HD Ticket")
+    columns = [
+        (field, label)
+        for field, label in EXPORT_COLUMNS
+        if field in STANDARD_FILTER_FIELDS or meta.has_field(field)
+    ]
+    tickets = frappe.get_list(
+        "HD Ticket",
+        filters=build_card_filters(filters, True),
+        or_filters=build_search_filters(filters),
+        fields=[field for field, _label in columns],
+        order_by="name desc",
+        limit_page_length=0,
+    )
+    rows = [[_(label) for _field, label in columns]]
+    for ticket in tickets:
+        ticket["_assign"] = ", ".join(json.loads(ticket.get("_assign") or "[]"))
+        rows.append([ticket.get(field) for field, _label in columns])
+
+    frappe.local.response.filename = f"tickets-{nowdate()}.xlsx"
+    frappe.local.response.filecontent = make_xlsx(rows, "Tickets").getvalue()
+    frappe.local.response.type = "download"
+
+
 @frappe.whitelist()
 def get_tickets_for_card_view(
     filters=None,
@@ -39,141 +164,10 @@ def get_tickets_for_card_view(
     offset=0,
     order_by="name desc"
 ):
-    """
-    Optimized API endpoint for fetching tickets in card view.
-    Supports filtering by status, priority, team (agent_group), agent, search, and date ranges.
-    """
-    import json
-
-    # Parse filters if they're passed as JSON string
-    if isinstance(filters, str):
-        filters = json.loads(filters) if filters else {}
-    elif filters is None:
-        filters = {}
-
-    def build_filters(raw_filters):
-        """Convert API filters to frappe.get_list compatible filters."""
-        filter_list = []
-
-        status_filter = raw_filters.get("status")
-        if isinstance(status_filter, list) and len(status_filter) == 2:
-            operator, values = status_filter
-            if operator == "in" and isinstance(values, list):
-                filter_list.append(["status", "in", values])
-            elif operator == "!=":
-                filter_list.append(["status", "!=", values])
-        elif isinstance(status_filter, str):
-            filter_list.append(["status", "=", status_filter])
-
-        priority_filter = raw_filters.get("priority")
-        if isinstance(priority_filter, list) and len(priority_filter) == 2:
-            operator, values = priority_filter
-            if operator == "in" and isinstance(values, list):
-                filter_list.append(["priority", "in", values])
-        elif isinstance(priority_filter, str):
-            filter_list.append(["priority", "=", priority_filter])
-
-        team_filter = raw_filters.get("agent_group")
-        if isinstance(team_filter, list) and len(team_filter) == 2:
-            operator, values = team_filter
-            if operator == "in" and isinstance(values, list):
-                filter_list.append(["agent_group", "in", values])
-        elif isinstance(team_filter, str):
-            filter_list.append(["agent_group", "=", team_filter])
-
-        assign_filter = raw_filters.get("_assign")
-        if isinstance(assign_filter, list) and len(assign_filter) == 2:
-            operator, value = assign_filter
-            if operator == "like":
-                filter_list.append(["_assign", "like", value])
-
-        assigned_to = raw_filters.get("assigned_to")
-        if assigned_to:
-            filter_list.append(["_assign", "like", f'%"{assigned_to}"%'])
-
-        raised_by = raw_filters.get("raised_by")
-        if raised_by:
-            filter_list.append(["raised_by", "=", raised_by])
-
-        owner = raw_filters.get("owner")
-        if owner:
-            # Owner refers to the ticket owner (User), not the contact.
-            # Align with list view / dashboard semantics so counts and
-            # card-view results stay consistent.
-            filter_list.append(["owner", "=", owner])
-
-        ticket_type_filter = raw_filters.get("ticket_type")
-        if isinstance(ticket_type_filter, list) and len(ticket_type_filter) == 2:
-            operator, values = ticket_type_filter
-            if operator == "in" and isinstance(values, list):
-                filter_list.append(["ticket_type", "in", values])
-        elif isinstance(ticket_type_filter, str):
-            filter_list.append(["ticket_type", "=", ticket_type_filter])
-
-        # Date range / creation filters (from dashboard duration or query params)
-        creation_filter = raw_filters.get("creation")
-        if isinstance(creation_filter, list) and len(creation_filter) == 2:
-            operator, value = creation_filter
-            if isinstance(operator, str):
-                operator = operator.lower()
-            # Between date range: ["between", [from_date, to_date]]
-            if operator == "between" and isinstance(value, list) and len(value) == 2:
-                filter_list.append(["creation", "between", value])
-            # Direct comparisons: [">=", date], ["<=", date], etc.
-            elif operator in (">=", "<=", ">", "<", "="):
-                filter_list.append(["creation", operator, value])
-
-        # Resolution date filters (actual resolved timestamp)
-        resolution_date_filter = raw_filters.get("resolution_date")
-        if isinstance(resolution_date_filter, list) and len(resolution_date_filter) == 2:
-            operator, value = resolution_date_filter
-            if isinstance(operator, str):
-                operator = operator.lower()
-            if operator == "between" and isinstance(value, list) and len(value) == 2:
-                filter_list.append(["resolution_date", "between", value])
-            elif operator in (">=", "<=", ">", "<", "="):
-                filter_list.append(["resolution_date", operator, value])
-
-        # Resolution by filter (for overdue/resolved tickets)
-        resolution_by_filter = raw_filters.get("resolution_by")
-        resolution_by_set_flag = raw_filters.get("_resolution_by", False) or raw_filters.get("resolution_by", False) is True
-        
-        if isinstance(resolution_by_filter, list) and len(resolution_by_filter) == 2:
-            operator, value = resolution_by_filter
-            if isinstance(operator, str):
-                operator = operator.lower()
-            if operator in (">=", "<=", ">", "<", "="):
-                filter_list.append(["resolution_by", operator, value])
-            # Handle "between" operator for date range queries
-            elif operator == "between" and isinstance(value, list) and len(value) == 2:
-                filter_list.append(["resolution_by", "between", value])
-            # If "is" operator, add as is set check
-            elif operator == "is" and value == "set":
-                filter_list.append(["resolution_by", "is", "set"])
-        
-        # If _resolution_by flag is True, ensure resolution_by is set
-        # Check if we haven't already added an "is set" filter
-        if resolution_by_set_flag and not any(f[0] == "resolution_by" and len(f) > 1 and f[1] == "is" for f in filter_list):
-            filter_list.append(["resolution_by", "is", "set"])
-
-        return filter_list
-
-    parsed_filters = build_filters(filters)
-
-    search_text = ""
-    if isinstance(filters, dict):
-        search_text = filters.get("search") or filters.get("search_text") or ""
-    search_text = (search_text or "").strip()
-    or_filters = []
-    if search_text:
-        like_value = f"%{search_text}%"
-        or_filters = [
-            ["name", "like", like_value],
-            ["subject", "like", like_value],
-            ["raised_by", "like", like_value],
-            ["contact", "like", like_value],
-            ["customer", "like", like_value],
-        ]
+    """Tickets for the card view. `filters` is {field: value | [operator, operand]}, plus `search` and `overdue`."""
+    filters = frappe.parse_json(filters) if filters else {}
+    parsed_filters = build_card_filters(filters, is_agent())
+    or_filters = build_search_filters(filters)
 
     # Default to ticket id based ordering so permission queries still apply.
     order_by_value = "name desc"
