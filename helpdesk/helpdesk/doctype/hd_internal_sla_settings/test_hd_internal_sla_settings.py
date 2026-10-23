@@ -127,3 +127,70 @@ class TestHDInternalSLASettings(FrappeTestCase):
         sla.apply_internal_sla(doc)
         self.assertIsNone(doc.internal_sla_tier)
         self.assertIsNone(doc.internal_sla_due_by)
+
+    def test_computed_fields_come_from_the_engine(self):
+        # a stale Desk form or an API call cannot overwrite the status and due times
+        due = THU + timedelta(days=2)
+        old = {
+            "investigation_status": "Open",
+            "internal_sla_tier": "Slow",
+            "internal_sla_status": "At Risk",
+            "internal_sla_warning_by": THU + timedelta(days=1),
+            "internal_sla_due_by": due,
+        }
+        doc = self.ticket(old, **{**old, "internal_sla_status": "On Track", "internal_sla_due_by": THU})
+        sla.apply_internal_sla(doc)
+        self.assertEqual((doc.internal_sla_status, doc.internal_sla_due_by), ("At Risk", due))
+
+    def test_hand_picked_no_sla_survives_rerouting(self):
+        old = {"investigation_status": "Open", "agent_group": "Delivery Issues", "internal_sla_tier": ""}
+        doc = self.ticket(old, **{**old, "agent_group": "Technical Issues", "ticket_type": "Technical"})
+        sla.apply_internal_sla(doc)
+        self.assertFalse(doc.internal_sla_tier)
+        self.assertIsNone(doc.internal_sla_due_by)
+
+    def test_resolving_while_disabled_still_closes_the_sla(self):
+        self.settings.enabled = 0
+        due = THU + timedelta(minutes=15)
+        old = {
+            "investigation_status": "Open",
+            "internal_sla_tier": "Fast",
+            "internal_sla_due_by": due,
+            "internal_sla_status": "On Track",
+        }
+        doc = self.ticket(old, **{**old, "investigation_status": "Resolved"})
+        with patch.object(sla, "now_datetime", return_value=due + timedelta(minutes=1)):
+            sla.apply_internal_sla(doc)
+        self.assertEqual(doc.internal_sla_status, "Breached")
+
+    def test_notify(self):
+        ticket = frappe._dict(
+            name=1, subject="s", owner="nobody@x.com", _assign=None, internal_sla_tier="Fast", internal_sla_due_by=THU
+        )
+        self.settings.send_email = 0
+        self.settings.append("breach_recipients", {"user": "cx@x.com"})
+        inserted = []
+        with (
+            patch.object(
+                sla.frappe,
+                "get_doc",
+                side_effect=lambda d: frappe._dict(insert=lambda **kwargs: inserted.append(d["user_to"])),
+            ),
+            patch.object(
+                sla.frappe,
+                "get_all",
+                side_effect=lambda doctype, filters=None, fields=None, **kwargs: [
+                    frappe._dict(name=user, email=user) for user in filters["name"][1]
+                ],
+            ),
+            patch.object(sla.frappe.db, "exists", return_value=False),
+        ):
+            sla.notify(ticket, "Met", self.settings)
+            self.assertEqual(inserted, [])
+            sla.notify(ticket, "At Risk", self.settings)  # nobody assigned: the breach recipients get the warning
+            self.assertEqual(inserted, ["cx@x.com"])
+            ticket._assign = '["a@x.com"]'
+            sla.notify(ticket, "At Risk", self.settings)
+            self.assertEqual(inserted[1:], ["a@x.com"])
+            sla.notify(ticket, "Breached", self.settings)
+            self.assertEqual(sorted(inserted[2:]), ["a@x.com", "cx@x.com"])

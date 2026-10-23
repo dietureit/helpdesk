@@ -168,11 +168,11 @@
           class="inline-flex items-center gap-1 rounded bg-surface-gray-2 py-0.5 pl-2 pr-1 text-[12px] leading-[18px] text-ink-gray-8"
           :title="JSON.stringify(leftovers)"
         >
-          Dashboard filter
+          Other filters
           <button
             type="button"
             class="rounded p-0.5 hover:bg-surface-gray-3"
-            aria-label="Remove dashboard filter"
+            aria-label="Remove other filters"
             @click="emit('remove-leftovers')"
           >
             <LucideX class="h-3 w-3" />

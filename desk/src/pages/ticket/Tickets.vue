@@ -736,10 +736,11 @@ const setSearchText = useDebounceFn((value: string) => {
 }, 400);
 
 const requestFilters = computed(() => {
+  // the panel wins over "More filters", which win over what a dashboard link brought along
   const filters: Record<string, any> = {
-    ...toApiFilters(panelFilters),
-    ...advancedList.params.filters,
     ...routeLeftovers.value,
+    ...advancedList.params.filters,
+    ...toApiFilters(panelFilters),
   };
   if (searchText.value) filters.search = searchText.value;
   return filters;
@@ -752,8 +753,9 @@ const filterMeta = createResource({
 });
 
 const filterOptions = computed(() => {
-  const names = (rows: any[] = [], key = "name") =>
-    rows.map((row) => ({ label: row[key], value: row[key] }));
+  // resource.data is null until the first fetch
+  const names = (rows: any[] | null, key = "name") =>
+    (rows || []).map((row) => ({ label: row[key], value: row[key] }));
   const categories: Record<string, string[]> = filterMeta.data?.categories || {};
   const agents = (agentOptions.data || []).map((agent) => ({
     label: agent.agent_name || agent.name,
@@ -817,15 +819,19 @@ function loadCardViewTickets() {
   cardViewResource.reload();
 }
 
-// Dashboard links open the list with ?filters=...: take them over as panel state, then drop
-// them from the URL so later panel changes aren't overridden.
+// ?filters=... is the filter state: dashboard links open the list with it, and the list writes its
+// own filters back so refresh, Back and shared links keep them.
+let urlFilters = ""; // the last ?filters value read from or written to the URL
+
 watch(
   () => route.query.filters,
   (raw) => {
-    if (!raw) return;
+    const value = raw ? String(raw) : "";
+    if (value === urlFilters) return; // our own router.replace
+    urlFilters = value;
     let parsed = {};
     try {
-      parsed = JSON.parse(String(raw));
+      parsed = value ? JSON.parse(value) : {};
     } catch {
       parsed = {};
     }
@@ -833,9 +839,6 @@ watch(
     clearCardFilters();
     Object.assign(panelFilters, state);
     routeLeftovers.value = leftovers;
-    const query = { ...route.query };
-    delete query.filters;
-    router.replace({ query });
   },
   { immediate: true }
 );
@@ -845,6 +848,14 @@ watch(
   () => {
     cardViewOffset.value = 0;
     loadCardViewTickets();
+    const { search: _search, ...filters } = requestFilters.value;
+    const value = Object.keys(filters).length ? JSON.stringify(filters) : "";
+    if (value === urlFilters) return;
+    urlFilters = value;
+    const query = { ...route.query };
+    if (value) query.filters = value;
+    else delete query.filters;
+    router.replace({ query });
   },
   { immediate: true }
 );

@@ -5,7 +5,7 @@ from frappe import _
 from frappe.utils import get_timespan_date_range, now_datetime, nowdate
 from frappe.utils.xlsxutils import make_xlsx
 
-from helpdesk.utils import agent_only, is_agent
+from helpdesk.utils import agent_only, is_agent, xlsx_rows
 
 
 def assign_ticket_to_agent(ticket_id, agent_id=None):
@@ -37,7 +37,7 @@ def bulk_assign_ticket_to_agent(ticket_ids, agent_id=None):
 
 
 FILTER_OPERATORS = {"=", "!=", "<", ">", "<=", ">=", "like", "not like", "in", "not in", "between", "timespan", "is"}
-STANDARD_FILTER_FIELDS = {"name", "creation", "modified", "owner", "_assign"}
+STANDARD_FILTER_FIELDS = {"name", "creation", "modified", "modified_by", "owner", "_assign"}
 # The customer portal shares this endpoint; customers may only filter on these.
 CUSTOMER_FILTER_FIELDS = {"name", "status", "priority", "ticket_type", "creation", "modified", "resolution_date"}
 SEARCH_FIELDS = (
@@ -107,6 +107,8 @@ EXPORT_COLUMNS = (
     ("ticket_type", "Ticket Type"),
     ("custom_category", "Category"),
     ("custom_sub_category", "Sub Category"),
+    ("custom_complaints_description", "Complaint Description"),
+    ("custom_department", "Department"),
     ("agent_group", "Team"),
     ("_assign", "Assigned To"),
     ("owner", "Created By"),
@@ -115,10 +117,15 @@ EXPORT_COLUMNS = (
     ("custom_customer_phone", "Customer Phone"),
     ("customer", "Customer"),
     ("contact", "Contact"),
+    ("custom_select_channel", "Channel"),
+    ("custom_select_source", "Source"),
     ("custom_messenger_conversation", "Messenger Conversation"),
     ("creation", "Created On"),
     ("first_responded_on", "First Responded On"),
     ("resolution_date", "Resolved On"),
+    ("custom_solution", "Resolution Provided"),
+    ("custom_complaint_status", "Complaint Status"),
+    ("custom_follow_up_status", "Follow-up Status"),
     ("agreement_status", "Customer SLA"),
     ("resolution_by", "Resolution Due By"),
     ("internal_sla_tier", "Internal SLA Tier"),
@@ -153,7 +160,7 @@ def export_tickets(filters=None):
         rows.append([ticket.get(field) for field, _label in columns])
 
     frappe.local.response.filename = f"tickets-{nowdate()}.xlsx"
-    frappe.local.response.filecontent = make_xlsx(rows, "Tickets").getvalue()
+    frappe.local.response.filecontent = make_xlsx(xlsx_rows(rows), "Tickets").getvalue()
     frappe.local.response.type = "download"
 
 

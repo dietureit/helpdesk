@@ -636,7 +636,7 @@ def get_status_card_data(filters: dict[str, any] = None) -> list[dict[str, any]]
 
     ticket = DocType("HD Ticket")
     today = frappe.utils.nowdate()
-    today_start = frappe.utils.get_datetime(frappe.utils.today() + " 00:00:00")
+    now = frappe.utils.now_datetime()
 
     # Get date range from filters
     from_date = filters.get("from_date") if filters else None
@@ -692,11 +692,11 @@ def get_status_card_data(filters: dict[str, any] = None) -> list[dict[str, any]]
     unresolved_cond = ticket.status.isin(open_statuses) if open_statuses else None
     unresolved = get_count(unresolved_cond)
 
-    # Overdue: Open tickets past resolution_by (computed, not a status)
-    # Compare with start of today (00:00:00) to include all of today's overdue tickets
+    # Overdue: Open tickets past resolution_by (computed, not a status).
+    # Same cutoff as the ticket list's "Customer SLA: Overdue" filter (helpdesk.api.ticket.build_card_filters).
     overdue_cond = (
         ticket.status.isin(open_statuses) if open_statuses else ticket.status == "Open"
-    ) & (ticket.resolution_by < today_start) & (ticket.resolution_by.isnotnull())
+    ) & (ticket.resolution_by < now) & (ticket.resolution_by.isnotnull())
     overdue = get_count(overdue_cond)
 
     # Due Today: Open tickets with resolution_by = today
@@ -750,10 +750,10 @@ def get_status_card_data(filters: dict[str, any] = None) -> list[dict[str, any]]
     # Resolved filter: status only to match resolved count logic
     resolved_filter = {"status": ["in", resolved_only_statuses]} if resolved_only_statuses else {}
     
-    # Overdue filter: Open status + resolution_by < start of today (matching overdue_cond logic)
+    # Overdue filter: Open status + resolution_by < now (matching overdue_cond logic)
     overdue_filter = {
         "status": ["in", open_statuses] if open_statuses else ["in", ["Open"]],
-        "resolution_by": ["<", frappe.utils.get_datetime_str(today_start)],
+        "resolution_by": ["<", frappe.utils.get_datetime_str(now)],
     }
 
     # Return Open, Resolved, Overdue, Today's Tickets

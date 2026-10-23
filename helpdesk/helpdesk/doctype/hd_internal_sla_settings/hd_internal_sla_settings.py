@@ -10,6 +10,7 @@ from helpdesk.utils import is_agent
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 # Agents edit investigation_status and internal_sla_tier; the rest is computed here.
+EDITABLE_FIELDS = ("investigation_status", "internal_sla_tier")
 TICKET_FIELDS = (
     "investigation_status",
     "investigation_resolved_on",
@@ -18,6 +19,8 @@ TICKET_FIELDS = (
     "internal_sla_warning_by",
     "internal_sla_due_by",
 )
+COMPUTED_FIELDS = tuple(field for field in TICKET_FIELDS if field not in EDITABLE_FIELDS)
+ALERT_STATUSES = ("At Risk", "Breached")
 # Rule column -> the HD Ticket field it is compared with (category fields come from crm).
 RULE_FIELDS = {
     "category": "custom_category",
@@ -92,7 +95,7 @@ def apply_internal_sla(doc):
     """HD Ticket before_save: track the department's investigation against the ticket's internal SLA tier."""
     try:
         settings = get_settings()
-    except frappe.DoesNotExistError:  # code deployed before migrate synced the doctype
+    except (frappe.DoesNotExistError, ImportError):  # code deployed before migrate synced the doctype
         return
     old = doc.get_doc_before_save()
     if doc.is_new():
@@ -104,22 +107,25 @@ def apply_internal_sla(doc):
         for field in TICKET_FIELDS:
             doc.set(field, old.get(field))
         return
+    else:
+        # Only this engine writes the computed fields: a stale Desk form or an API call can't overwrite them.
+        for field in COMPUTED_FIELDS:
+            doc.set(field, old.get(field))
     if not doc.investigation_status:  # tickets from before this feature are not tracked
         return
     if doc.has_value_changed("investigation_status"):
         doc.investigation_resolved_on = now_datetime() if doc.investigation_status == "Resolved" else None
-    if not settings.enabled:
-        return
 
-    if not doc.internal_sla_tier and (doc.is_new() or not old.investigation_status):
-        doc.internal_sla_tier = match_tier(doc, settings)
-    elif (
-        old
-        and any(old.get(field) != doc.get(field) for field in RULE_FIELDS.values())
-        and doc.internal_sla_tier in (None, "", match_tier(old, settings))
-    ):
-        # Re-routing moves an auto-picked tier along; a tier an agent picked by hand stays.
-        doc.internal_sla_tier = match_tier(doc, settings)
+    if settings.enabled:
+        if not doc.internal_sla_tier and (doc.is_new() or not old.investigation_status):
+            doc.internal_sla_tier = match_tier(doc, settings)
+        elif (
+            old
+            and any(old.get(field) != doc.get(field) for field in RULE_FIELDS.values())
+            and (doc.internal_sla_tier or None) == match_tier(old, settings)
+        ):
+            # Re-routing moves an auto-picked tier along; a tier (or "no SLA") an agent picked by hand stays.
+            doc.internal_sla_tier = match_tier(doc, settings)
 
     if doc.has_value_changed("internal_sla_tier"):
         set_due_times(doc, settings)
@@ -163,6 +169,8 @@ def scan_internal_sla():
     tickets = frappe.get_all(
         "HD Ticket",
         filters={
+            "investigation_status": "Open",
+            "is_merged": 0,
             "internal_sla_status": ["in", ["On Track", "At Risk"]],
             "internal_sla_warning_by": ["<=", now],
         },
@@ -173,6 +181,7 @@ def scan_internal_sla():
         if status == ticket.internal_sla_status:
             continue
         try:
+            # The status moves first: a failed alert must not fire again every minute.
             frappe.db.set_value("HD Ticket", ticket.name, "internal_sla_status", status, update_modified=False)
             notify(ticket, status, settings)
         except Exception:
@@ -180,12 +189,21 @@ def scan_internal_sla():
 
 
 def notify(ticket, status, settings):
+    if status not in ALERT_STATUSES:
+        return
     users = set(json.loads(ticket._assign or "[]"))
     # helpdesk.utils.is_agent(user) is always True while the scheduler runs as Administrator
     if not users and frappe.db.exists("HD Agent", {"name": ticket.owner, "is_active": 1}):
         users.add(ticket.owner)
-    if status == "Breached":
+    if status == "Breached" or not users:
+        # BRD §6: the CX Manager acts on breaches; with nobody assigned, they get the warning too.
         users.update(row.user for row in settings.breach_recipients if row.user)
+    # a deleted or disabled assignee must not break the alert for everyone else
+    users = (
+        frappe.get_all("User", filters={"name": ["in", list(users)], "enabled": 1}, fields=["name", "email"])
+        if users
+        else []
+    )
     if not users:
         return
 
@@ -200,7 +218,7 @@ def notify(ticket, status, settings):
             {
                 "doctype": "HD Notification",
                 "user_from": "Administrator",
-                "user_to": user,
+                "user_to": user.name,
                 "notification_type": "SLA Alert",
                 "reference_ticket": ticket.name,
                 "message": message,
@@ -209,13 +227,19 @@ def notify(ticket, status, settings):
 
     if not settings.send_email:
         return
-    recipients = frappe.get_all("User", filters={"name": ["in", list(users)], "enabled": 1}, pluck="email")
-    if recipients := [email for email in recipients if email]:
-        link = get_url(f"/helpdesk/tickets/{ticket.name}")
+    recipients = [user.email for user in users if user.email]
+    if not recipients:
+        return
+    link = get_url(f"/helpdesk/tickets/{ticket.name}")
+    try:
+        # No reference_doctype: a reply to this alert must not be threaded into the customer's ticket.
         frappe.sendmail(
             recipients=recipients,
             subject=message,
-            message=f'{escape_html(message)}<br><br><a href="{link}">{link}</a>',
-            reference_doctype="HD Ticket",
-            reference_name=ticket.name,
+            message=(
+                f'{escape_html(message)}<br><br><a href="{link}">{link}</a><br><br>'
+                f"{_('This is an automated alert; replies are not monitored.')}"
+            ),
         )
+    except Exception:
+        frappe.log_error(f"Internal SLA alert email failed for ticket {ticket.name}")
