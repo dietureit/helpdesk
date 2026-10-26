@@ -20,6 +20,7 @@ export const useNotificationStore = defineStore("notification", () => {
       "reference_ticket",
       "user_from",
       "user_to",
+      "message",
     ],
     orderBy: "creation desc",
   });

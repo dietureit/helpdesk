@@ -60,8 +60,8 @@
               <div id="operator">
                 <FormControl
                   type="select"
-                  v-model="f.operator"
-                  @change="(e) => updateOperator(e, f)"
+                  :model-value="f.operator"
+                  @update:model-value="(v) => updateOperator(v, f)"
                   :options="getOperators(f.field.fieldtype, f.field.fieldname)"
                   :placeholder="'Equals'"
                 />
@@ -91,8 +91,8 @@
                 <div id="operator">
                   <FormControl
                     type="select"
-                    v-model="f.operator"
-                    @change="(e) => updateOperator(e, f)"
+                    :model-value="f.operator"
+                    @update:model-value="(v) => updateOperator(v, f)"
                     :options="
                       getOperators(f.field.fieldtype, f.field.fieldname)
                     "
@@ -338,9 +338,12 @@ function getOperators(fieldtype, fieldname) {
 function getValueControl(f) {
   const { field, operator } = f;
   const { fieldtype, options } = field;
+  // frappe-ui's select emits update:modelValue, never change (the template's @change only serves native controls)
+  const onSelect = { "onUpdate:modelValue": (v) => updateValue(v, f) };
   if (operator == "is") {
     return h(FormControl, {
       type: "select",
+      ...onSelect,
       options: [
         {
           label: "Set",
@@ -355,6 +358,7 @@ function getValueControl(f) {
   } else if (operator == "timespan") {
     return h(FormControl, {
       type: "select",
+      ...onSelect,
       options: timespanOptions,
     });
   } else if (["like", "not like", "in", "not in"].includes(operator)) {
@@ -364,6 +368,7 @@ function getValueControl(f) {
       fieldtype == "Check" ? ["Yes", "No"] : getSelectOptions(options);
     return h(FormControl, {
       type: "select",
+      ...onSelect,
       options: _options.map((o) => ({
         label: o,
         value: o,
@@ -490,10 +495,9 @@ function updateValue(value, filter) {
   apply();
 }
 
-function updateOperator(event, filter) {
-  let oldOperatorValue = event.target._value;
-  let newOperatorValue = event.target.value;
-  filter.operator = event.target.value;
+function updateOperator(newOperatorValue, filter) {
+  const oldOperatorValue = filter.operator;
+  filter.operator = newOperatorValue;
   if (!isSameTypeOperator(oldOperatorValue, newOperatorValue)) {
     filter.value = getDefaultValue(filter.field);
   }

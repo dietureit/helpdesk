@@ -43,6 +43,7 @@ from helpdesk.utils import (
 )
 from frappe.utils import now_datetime
 
+from ..hd_internal_sla_settings.hd_internal_sla_settings import apply_internal_sla
 from ..hd_notification.utils import clear as clear_notifications
 from ..hd_service_level_agreement.utils import get_sla
 
@@ -95,6 +96,7 @@ class HDTicket(Document):
 
     def before_save(self):
         self.apply_sla()
+        apply_internal_sla(self)
         if not self.is_new():
             self.handle_ticket_activity_update()
 
@@ -417,6 +419,8 @@ class HDTicket(Document):
             "ticket_type": "type",
             "contact": "contact",
             "customer": "customer",
+            "investigation_status": "investigation status",
+            "internal_sla_tier": "internal SLA tier",
         }
         for field in [
             "status",
@@ -425,6 +429,8 @@ class HDTicket(Document):
             "contact",
             "customer",
             "ticket_type",
+            "investigation_status",
+            "internal_sla_tier",
         ]:
             if self.has_value_changed(field):
                 # Get the display value for customer/contact

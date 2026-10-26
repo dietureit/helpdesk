@@ -112,6 +112,17 @@
         </template>
       </div>
 
+      <InternalSlaSection
+        v-if="internalSlaData.data?.enabled"
+        :counts="internalSlaData.data.counts"
+        :tickets="internalSlaData.data.tickets"
+        :team="filters.team"
+        :agent="filters.agent"
+        :owner="filters.owner"
+        :from-date="filters.period?.split(',')[0]"
+        :to-date="filters.period?.split(',')[1]"
+      />
+
       <!-- Today's Trends Section -->
       <div class="p-4 mb-4 bg-white border border-gray-200 rounded-lg">
         <TrendChartSection
@@ -187,6 +198,7 @@ import {
   UnresolvedSection,
   ResolvedSection,
   StatusBreakdownSection,
+  InternalSlaSection,
 } from "./components";
 
 const { isManager, userId } = useAuthStore();
@@ -234,6 +246,14 @@ const unresolvedData = createResource({
 const resolvedData = createResource({
   url: "helpdesk.api.dashboard.get_resolved_grouped_data",
   cache: ["Dashboard", "ResolvedData"],
+  params: {
+    filters: getApiFilters(),
+  },
+});
+
+const internalSlaData = createResource({
+  url: "helpdesk.api.dashboard.get_internal_sla_data",
+  cache: ["Dashboard", "InternalSla"],
   params: {
     filters: getApiFilters(),
   },
@@ -289,6 +309,9 @@ function reloadAllResources() {
 
   resolvedData.update({ params: { filters: apiFilters } });
   resolvedData.reload();
+
+  internalSlaData.update({ params: { filters: apiFilters } });
+  internalSlaData.reload();
 }
 
 const statusBreakdown = computed(() => {

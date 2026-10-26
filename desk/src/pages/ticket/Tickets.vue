@@ -77,18 +77,11 @@
       :page-length-count="pageLengthCount"
       :status-options="statusOptionList"
       :priority-options="priorityOptionList"
-      :status-filter-options="statusFilterOptions"
-      :priority-filter-options="priorityFilterOptions"
-      :team-filter-options="teamFilterOptions"
-      :agent-filter-options="effectiveAgentFilterOptions"
-      :owner-filter-options="ownerFilterOptions"
-      :ticket-type-filter-options="ticketTypeFilterOptions"
-      :filters="cardFilters"
-      :created-at="cardDateFilters.createdAt"
-      :resolved-at="cardDateFilters.resolvedAt"
+      :filter-state="panelFilters"
+      :filter-options="filterOptions"
+      :leftovers="routeLeftovers"
+      :offset="cardViewOffset"
       :search="cardSearch"
-      :quick-views="quickViews"
-      :active-quick-view="activeQuickView"
       @empty-action="handleEmptyStateAction"
       @row-click="handleCardClick"
       @update-status="handleCardStatus"
@@ -96,14 +89,11 @@
       @next-page="handleCardNextPage"
       @prev-page="handleCardPrevPage"
       @load-more="handleCardLoadMore"
-      @update:filters="updateCardFilters"
-      @update:created-at="(value) => updateCardDateFilter('createdAt', value)"
-      @update:resolved-at="(value) => updateCardDateFilter('resolvedAt', value)"
       @update:search="handleCardSearchUpdate"
-      @apply-filters="applyCardFilters"
-      @apply-date-filters="applyCardDateFilters"
-      @reset-filters="resetCardFilters"
-      @apply-quick-view="applyQuickView"
+      @update-filter="updatePanelFilter"
+      @clear-filters="clearCardFilters"
+      @remove-leftovers="routeLeftovers = {}"
+      @export="exportCardTickets"
       @update-limit="handleUpdateLimit"
     />
     <ExportModal
@@ -133,6 +123,12 @@ import {
 import ExportModal from "@/components/ticket/ExportModal.vue";
 import TicketRowActions from "@/components/ticket/TicketRowActions.vue";
 import TicketCardViewSection from "@/components/ticket/TicketCardViewSection.vue";
+import {
+  PanelState,
+  UNASSIGNED,
+  fromRouteFilters,
+  toApiFilters,
+} from "@/components/ticket/ticketFilters";
 // import TicketListViewSection from "@/components/ticket/TicketListViewSection.vue";
 import ViewBreadcrumbs from "@/components/ViewBreadcrumbs.vue";
 import ViewModal from "@/components/ViewModal.vue";
@@ -145,7 +141,7 @@ import { View } from "@/types";
 import { getIcon, isCustomerPortal } from "@/utils";
 import { Badge, FeatherIcon, toast, Tooltip, usePageMeta, Dropdown, call, createResource } from "frappe-ui";
 import { useDebounceFn } from "@vueuse/core";
-import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, h, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from "vue";
 // import { useStorage } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
 import LucidePencil from "~icons/lucide/pencil";
@@ -153,24 +149,6 @@ import LucidePencil from "~icons/lucide/pencil";
 // import LucideLayoutGrid from "~icons/lucide/layout-grid";
 import LucideAlignJustify from "~icons/lucide/align-justify";
 import LucidePlus from "~icons/lucide/plus";
-import LucideInbox from "~icons/lucide/inbox";
-import LucideMailOpen from "~icons/lucide/mail-open";
-import LucideAlertCircle from "~icons/lucide/alert-circle";
-import LucideUser from "~icons/lucide/user";
-
-type CardFilters = {
-  status: any[];
-  priority: any[];
-  team: any[];
-  agent: any[];
-  owner: any[];
-  ticketType: any[];
-};
-
-type CardDateFilters = {
-  createdAt: string;
-  resolvedAt: string;
-};
 
 const router = useRouter();
 const route = useRoute();
@@ -240,68 +218,7 @@ const currentCount = computed(() => {
 const exportRowCount = computed(
   () => listViewRef.value?.list?.data?.total_count ?? 0
 );
-const cardFilters = reactive<CardFilters>({
-  status: [{ label: "All", value: "" }],
-  priority: [],
-  team: [],
-  agent: [],
-  owner: [],
-  ticketType: [],
-});
-const cardDateFilters = reactive<CardDateFilters>({
-  createdAt: "",
-  resolvedAt: "",
-});
-const cardSearch = ref("");
-const applySearchDebounced = useDebounceFn(() => {
-  applyCardFilters(cardFilters);
-}, 400);
-const activeQuickView = ref<string>("");
 const showExportModal = ref(false);
-const authStore = useAuthStore();
-const currentUserEmail = computed(() => authStore.userId || authStore.username || authStore.user || "");
-const currentUserName = computed(() => authStore.username || authStore.userId || authStore.user || "");
-const filtersApplied = ref(false);
-
-const quickViews = computed(() => {
-  return [
-    {
-      label: "All tickets",
-      icon: LucideInbox,
-      filters: {},
-    },
-    {
-      label: "All unresolved tickets",
-      icon: LucideAlertCircle,
-      filters: {
-        status: ["in", ["Open", "Pending"]],
-      },
-    },
-    {
-      label: "New and my open tickets",
-      icon: LucideMailOpen,
-      filters: {
-        status: ["in", ["Open", "New"]],
-        _assign: ["like", `%"${currentUserEmail.value}"%`],
-      },
-    },
-    {
-      label: "My all tickets",
-      icon: LucideUser,
-      filters: {
-        _assign: ["like", `%"${currentUserEmail.value}"%`],
-      },
-    },
-    {
-      label: "Tickets I raised",
-      icon: LucideUser,
-      filters: {
-        owner: currentUserName.value,
-      },
-    },
-  ];
-});
-
 const { getStatus, statuses } = useTicketStatusStore();
 
 // Priority options
@@ -518,14 +435,6 @@ const priorityOptionList = computed(() =>
   (priorities.data || []).map((p) => p.name)
 );
 
-const ownerFilterOptions = computed(() =>
-  (ownerOptions.data || []).map((u) => ({
-    label: u.full_name || u.name || u.email,
-    value: u.email || u.name,
-    image: u.user_image || "",
-  }))
-);
-
 const agentOptions = createResource({
   url: "frappe.client.get_list",
   params: {
@@ -535,53 +444,6 @@ const agentOptions = createResource({
   },
   auto: true,
 });
-
-const ownerOptions = createResource({
-  url: "frappe.client.get_list",
-  params: {
-    doctype: "User",
-    fields: ["name", "full_name", "email", "user_image"],
-    filters: {
-      enabled: 1,
-    },
-    limit: 1000,
-    order_by: "full_name asc",
-  },
-  auto: true,
-});
-
-// Filter dropdown options
-const statusFilterOptions = computed(() => {
-  const options = (statuses.data || []).map((s) => ({
-    label: isCustomerPortal.value ? s.label_customer : s.label_agent,
-    value: s.label_agent,
-    indicatorClass: s.parsed_color,
-    category: s.category,
-  }));
-  
-  const allOption = {
-    label: "All",
-    value: "",
-    indicatorClass: "",
-    category: "",
-  };
-  
-  return [allOption, ...options];
-});
-
-const priorityFilterOptions = computed(() =>
-  (priorities.data || []).map((p) => ({
-    label: p.name,
-    value: p.name,
-  }))
-);
-
-const agentFilterOptions = computed(() =>
-  (agentOptions.data || []).map((a) => ({
-    label: a.agent_name || a.name,
-    value: a.name,
-  }))
-);
 
 const teamOptions = createResource({
   url: "frappe.client.get_list",
@@ -593,13 +455,6 @@ const teamOptions = createResource({
   auto: true,
 });
 
-const teamFilterOptions = computed(() =>
-  (teamOptions.data || []).map((t) => ({
-    label: t.team_name || t.name,
-    value: t.name,
-  }))
-);
-
 const ticketTypeOptions = createResource({
   url: "frappe.client.get_list",
   params: {
@@ -610,119 +465,10 @@ const ticketTypeOptions = createResource({
   auto: true,
 });
 
-const ticketTypeFilterOptions = computed(() =>
-  (ticketTypeOptions.data || []).map((t) => ({
-    label: t.name,
-    value: t.name,
-  }))
-);
-
-const selectedTeam = computed(() => {
-  const first = cardFilters.team?.[0];
-  if (!first) return "";
-  if (typeof first === "string") return first;
-  return first?.value || "";
-});
-
-const teamMembers = createResource({
-  url: "helpdesk.helpdesk.doctype.hd_team.hd_team.get_team_members",
-  cache: ["TicketCard", "TeamMembers"],
-  auto: false,
-  params: {
-    team: selectedTeam.value,
-  },
-});
-
-watch(
-  selectedTeam,
-  (team) => {
-    if (team) {
-      teamMembers.update({ params: { team } });
-      teamMembers.reload();
-    } else {
-      teamMembers.data = [];
-    }
-    cardFilters.agent = [];
-  },
-  { immediate: false }
-);
-
-const teamAgentOptions = computed(() => {
-  const data = teamMembers.data || [];
-  if (!selectedTeam.value || !Array.isArray(data) || !data.length) return [];
-  return data.map((member: string) => ({
-    label: member,
-    value: member,
-  }));
-});
-
-const effectiveAgentFilterOptions = computed(() => {
-  if (teamAgentOptions.value.length) return teamAgentOptions.value;
-  return agentFilterOptions.value;
-});
-
 function setDefaultFilters(filters: Record<string, any> = {}) {
   Object.keys(defaultFilters).forEach((key) => delete defaultFilters[key]);
   Object.assign(defaultFilters, filters || {});
 }
-
-function getBaseDefaultFilters() {
-  const listFilters = listViewRef.value?.list?.params?.filters;
-  if (Object.keys(defaultFilters).length) {
-    return { ...defaultFilters };
-  }
-  if (listFilters && Object.keys(listFilters).length) {
-    return { ...listFilters };
-  }
-  return {};
-}
-
-function syncCardFiltersWithDefault(sourceFilters?: Record<string, any>) {
-  const defaults: Record<string, any> =
-    (sourceFilters && Object.keys(sourceFilters).length ? sourceFilters : null) ||
-    getBaseDefaultFilters();
-  const pickValues = (
-    key: keyof CardFilters,
-    optionsList: { value: string; label: string; indicatorClass?: string }[]
-  ) => {
-    const filter = defaults[key];
-    if (Array.isArray(filter) && filter[0] === "in" && Array.isArray(filter[1])) {
-      const values = filter[1] as string[];
-      return optionsList.filter((opt) => values.includes(opt.value));
-    }
-    return [];
-  };
-
-  cardFilters.status = pickValues("status", statusFilterOptions.value);
-  cardFilters.priority = pickValues("priority", priorityFilterOptions.value as any);
-  cardFilters.team = pickValues("team", teamFilterOptions.value as any);
-  cardFilters.agent = pickValues("agent", agentFilterOptions.value as any);
-  cardFilters.owner = pickValues("owner", ownerFilterOptions.value as any);
-}
-
-watch(
-  () => listViewRef.value?.list?.params?.filters,
-  (filters) => {
-    if (!filters) return;
-    if (!Object.keys(defaultFilters).length && Object.keys(filters).length) {
-      setDefaultFilters(filters);
-    }
-    syncCardFiltersWithDefault(filters);
-  },
-  { immediate: true, deep: true }
-);
-
-watch(
-  () => [
-    statusFilterOptions.value,
-    priorityFilterOptions.value,
-    teamFilterOptions.value,
-    agentFilterOptions.value,
-    ownerFilterOptions.value,
-  ],
-  () => syncCardFiltersWithDefault(),
-  { immediate: true }
-);
 
 watch(
   () => route.query.view,
@@ -962,384 +708,157 @@ function handleCardPriority(ticketId: string, value: string) {
   updateTicketField(ticketId, "priority", value);
 }
 
-function updateCardFilters(value: CardFilters) {
-  cardFilters.status = value?.status || [];
-  cardFilters.priority = value?.priority || [];
-  cardFilters.team = value?.team || [];
-  cardFilters.agent = value?.agent || [];
-  cardFilters.ticketType = value?.ticketType || [];
-}
+// Filter panel state (keys from components/ticket/ticketFilters.ts)
+const panelFilters = reactive<PanelState>({});
+// Dashboard-link filters the panel can't show (e.g. several statuses); sent as they are
+const routeLeftovers = ref<Record<string, any>>({});
+// "More filters" popover (view-controls/Filter.vue) on any ticket field
+const advancedList = reactive({ params: { filters: {} as Record<string, any> } });
+const filterableFields = createResource({
+  url: "helpdesk.api.doc.get_filterable_fields",
+  cache: ["DocField", "HD Ticket"],
+  params: { doctype: "HD Ticket" },
+  auto: !isCustomerPortal.value,
+  transform: (data) =>
+    data.map((field) => ({ label: field.label, value: field.fieldname, ...field })),
+});
+provide("listViewData", reactive({ list: advancedList, filterableFields }));
+provide("listViewActions", {
+  applyFilters: (filters: Record<string, any>) => {
+    advancedList.params.filters = { ...filters };
+  },
+});
 
-function updateCardDateFilter(key: keyof CardDateFilters, value: string) {
-  cardDateFilters[key] = value || "";
-}
+const cardSearch = ref("");
+const searchText = ref("");
+const setSearchText = useDebounceFn((value: string) => {
+  searchText.value = value.trim();
+}, 400);
 
-function applyCardDateFilters() {
-  applyCardFilters(cardFilters);
-}
-
-function getDateRange(option: string): [string, string] | null {
-  if (!option) return null;
-  const format = (value: ReturnType<typeof dayjs>) =>
-    value.format("YYYY-MM-DD HH:mm:ss");
-
-  if (option === "today") {
-    const today = dayjs();
-    return [format(today.startOf("day")), format(today.endOf("day"))];
-  }
-  if (option === "yesterday") {
-    const yesterday = dayjs().subtract(1, "day");
-    return [format(yesterday.startOf("day")), format(yesterday.endOf("day"))];
-  }
-  if (option === "this_week") {
-    const start = dayjs().startOf("week");
-    const end = dayjs().endOf("day");
-    return [format(start), format(end)];
-  }
-  if (option === "this_month") {
-    const start = dayjs().startOf("month");
-    const end = dayjs().endOf("day");
-    return [format(start), format(end)];
-  }
-  return null;
-}
-
-function applyCardDateRangeFilters(filters: Record<string, any>) {
-  const createdRange = getDateRange(cardDateFilters.createdAt);
-  if (createdRange) {
-    filters.creation = ["between", createdRange];
-  }
-
-  const resolvedRange = getDateRange(cardDateFilters.resolvedAt);
-  if (resolvedRange) {
-    filters.resolution_date = ["between", resolvedRange];
-  }
-}
-
-function buildCardFilters(filtersArg: CardFilters = cardFilters): Record<string, any> {
-  const sourceFilters = filtersArg || cardFilters;
-  let filters: Record<string, any> = {};
-  
-  const extractValues = (arr: any[] = []) => {
-    return arr.map((item) =>
-      typeof item === "object" && item !== null && "value" in item
-        ? item.value
-        : item
-    );
+const requestFilters = computed(() => {
+  // the panel wins over "More filters", which win over what a dashboard link brought along
+  const filters: Record<string, any> = {
+    ...routeLeftovers.value,
+    ...advancedList.params.filters,
+    ...toApiFilters(panelFilters),
   };
-
-  let rawStatusValues = extractValues(sourceFilters.status);
-  const statusAllSelected = rawStatusValues.some(
-    (v) => v === "" || v === null || v === undefined
-  );
-
-  const overdueSelected = rawStatusValues.includes("Overdue");
-
-  if (overdueSelected) {
-    const openStatuses = (statuses.data || [])
-      .filter((status) => status.category === "Open")
-      .map((status) => status.label_agent)
-      .filter(Boolean);
-    const statusValues = openStatuses.length ? openStatuses : ["Open"];
-    filters["status"] = ["in", statusValues];
-    filters["resolution_by"] = [
-      "<",
-      dayjs().startOf("day").format("YYYY-MM-DD HH:mm:ss"),
-    ];
-  } else if (!statusAllSelected && sourceFilters.status?.length) {
-    const statusValues = rawStatusValues.filter(Boolean);
-    if (statusValues.length) {
-      filters["status"] = ["in", statusValues];
-    }
-  }
-
-  if (sourceFilters.priority?.length) {
-    const priorityValues = extractValues(sourceFilters.priority);
-    filters["priority"] = ["in", priorityValues];
-  }
-
-  if (sourceFilters.team?.length) {
-    const teamValues = extractValues(sourceFilters.team);
-    filters["agent_group"] = ["in", teamValues];
-  }
-
-  if (sourceFilters.agent?.length) {
-    const agentValues = extractValues(sourceFilters.agent);
-    const agent = agentValues[0];
-    if (agent) {
-      filters["_assign"] = ["like", `%\"${agent}\"%`];
-    }
-  }
-
-  if (sourceFilters.owner?.length) {
-    const ownerValues = extractValues(sourceFilters.owner);
-    const owner = ownerValues[0];
-    if (owner) {
-      filters["owner"] = owner;
-    }
-  }
-
-  if (sourceFilters.ticketType?.length) {
-    const ticketTypeValues = extractValues(sourceFilters.ticketType).filter(Boolean);
-    if (ticketTypeValues.length) {
-      filters["ticket_type"] = ["in", ticketTypeValues];
-    }
-  }
-
+  if (searchText.value) filters.search = searchText.value;
   return filters;
+});
+
+// Categories and internal SLA tiers for the panel
+const filterMeta = createResource({
+  url: "helpdesk.api.internal_sla.get_options",
+  auto: !isCustomerPortal.value,
+});
+
+const filterOptions = computed(() => {
+  // resource.data is null until the first fetch
+  const names = (rows: any[] | null, key = "name") =>
+    (rows || []).map((row) => ({ label: row[key], value: row[key] }));
+  const categories: Record<string, string[]> = filterMeta.data?.categories || {};
+  const agents = (agentOptions.data || []).map((agent) => ({
+    label: agent.agent_name || agent.name,
+    value: agent.name,
+  }));
+  return {
+    custom_category: Object.keys(categories).map((c) => ({ label: c, value: c })),
+    custom_sub_category: Object.entries(categories).flatMap(([group, subs]) =>
+      subs.map((sub) => ({ label: sub, value: sub, group }))
+    ),
+    ticket_type: names(ticketTypeOptions.data),
+    status: (statuses.data || [])
+      .filter((s) => s.enabled)
+      .map((s) => ({
+        label: isCustomerPortal.value ? s.label_customer : s.label_agent,
+        value: s.label_agent,
+      })),
+    priority: names(priorities.data),
+    agent_group: names(teamOptions.data),
+    assigned_to: [{ label: "Unassigned", value: UNASSIGNED }, ...agents],
+    owner: [{ label: "Administrator", value: "Administrator" }, ...agents],
+    internal_sla_tier: (filterMeta.data?.tiers || []).map((t: string) => ({ label: t, value: t })),
+  };
+});
+
+function updatePanelFilter(key: string, value: string) {
+  if (value) panelFilters[key] = value;
+  else delete panelFilters[key];
+  // sub-categories belong to one category
+  if (key === "custom_category") delete panelFilters.custom_sub_category;
 }
 
-function applyCardSearchFilter(filters: Record<string, any>) {
-  const searchText = cardSearch.value.trim();
-  if (searchText) {
-    filters.search = searchText;
-  }
-}
-
-function loadCardViewTickets() {
-  console.log("loadCardViewTickets called");
-  const filters = buildCardFilters(cardFilters);
-  applyCardDateRangeFilters(filters);
-  
-  // Merge with route query filters (for date, owner, agent, team, etc.)
-  if (route.query.filters) {
-    try {
-      let queryFilters = typeof route.query.filters === 'string' 
-        ? JSON.parse(route.query.filters) 
-        : route.query.filters;
-      
-      // Normalize filter operators
-      Object.keys(queryFilters).forEach(key => {
-        const filterValue = queryFilters[key];
-        if (Array.isArray(filterValue) && filterValue.length === 2) {
-          const operator = filterValue[0];
-          if (typeof operator === 'string') {
-            queryFilters[key] = [operator.toLowerCase(), filterValue[1]];
-          }
-        }
-      });
-      
-      // Merge route filters with card filters (route filters take precedence)
-      // Merge specific filters from route query
-      if (queryFilters.creation) {
-        filters.creation = queryFilters.creation;
-      }
-      if (queryFilters.owner) {
-        filters.owner = queryFilters.owner;
-      }
-      if (queryFilters.status) {
-        filters.status = queryFilters.status;
-      }
-      if (queryFilters.agent_group) {
-        filters.agent_group = queryFilters.agent_group;
-      }
-      if (queryFilters._assign) {
-        filters._assign = queryFilters._assign;
-      }
-      // Merge resolution_by filter (for overdue/resolved tickets from dashboard)
-      if (queryFilters.resolution_by) {
-        filters.resolution_by = queryFilters.resolution_by;
-      }
-    } catch (error) {
-      console.error("Error merging route filters:", error);
-    }
-  }
-
-  applyCardSearchFilter(filters);
-  
-  console.log("Loading card view tickets with filters:", filters);
-  
-  cardViewResource.update({
-    params: {
-      filters: JSON.stringify(filters),
-      limit: cardViewLimit.value,
-      offset: cardViewOffset.value,
-      order_by: "modified desc"
-    }
-  });
-  
-  cardViewResource.reload();
-}
-
-function applyCardFilters(filtersArg: CardFilters = cardFilters) {
-  // User is interacting with the sidebar filters; drop route-level filters
-  // so the manual selections are not overridden by stale query params.
-  if (route.query.filters) {
-    const newQuery = { ...route.query };
-    delete newQuery.filters;
-    filtersApplied.value = false; // Reset so route watcher doesn't block
-    router.replace({ query: newQuery });
-  }
-
-  const sourceFilters = filtersArg || cardFilters;
-  updateCardFilters(sourceFilters);
-
-  if (viewMode.value === "card") {
-    cardViewOffset.value = 0;
-    loadCardViewTickets();
-  } else {
-    if (!listViewRef.value?.list) return;
-    const list = listViewRef.value.list;
-
-    const filters = buildCardFilters(sourceFilters);
-    applyCardDateRangeFilters(filters);
-    
-    // Preserve route filters (date, owner, agent, team) when applying card filters
-    if (route.query.filters) {
-      try {
-        let queryFilters = typeof route.query.filters === 'string' 
-          ? JSON.parse(route.query.filters) 
-          : route.query.filters;
-        
-        // Normalize filter operators
-        Object.keys(queryFilters).forEach(key => {
-          const filterValue = queryFilters[key];
-          if (Array.isArray(filterValue) && filterValue.length === 2) {
-            const operator = filterValue[0];
-            if (typeof operator === 'string') {
-              queryFilters[key] = [operator.toLowerCase(), filterValue[1]];
-            }
-          }
-        });
-        
-        // Merge route filters with card filters (route filters take precedence for agent/team/date/owner)
-        if (queryFilters.creation) {
-          filters.creation = queryFilters.creation;
-        }
-        if (queryFilters.owner) {
-          filters.owner = queryFilters.owner;
-        }
-        if (queryFilters.agent_group) {
-          filters.agent_group = queryFilters.agent_group;
-        }
-        if (queryFilters._assign) {
-          filters._assign = queryFilters._assign;
-        }
-      } catch (error) {
-        console.error("Error merging route filters:", error);
-      }
-    }
-    
-    console.log("Applying card filters to list view:", filters);
-
-    const params = {
-      ...list.params,
-      filters: filters,
-      default_filters: filters,
-    };
-
-    list.submit(params);
-    list.params = params;
-  }
+function clearCardFilters() {
+  Object.keys(panelFilters).forEach((key) => delete panelFilters[key]);
+  routeLeftovers.value = {};
+  advancedList.params.filters = {};
+  cardSearch.value = "";
+  searchText.value = "";
 }
 
 function handleCardSearchUpdate(value: string) {
   cardSearch.value = value;
-  applySearchDebounced();
+  setSearchText(value);
 }
 
-function resetCardFilters() {
-  // Reset to "All" filter
-  cardFilters.status = [{ label: "All", value: "" }];
-  cardFilters.priority = [];
-  cardFilters.team = [];
-  cardFilters.agent = [];
-  cardFilters.owner = [];
-  cardFilters.ticketType = [];
-  cardDateFilters.createdAt = "";
-  cardDateFilters.resolvedAt = "";
-  cardSearch.value = "";
-  activeQuickView.value = "";
-  filtersApplied.value = false; // Allow fresh filter application
-  
-  if (viewMode.value === "card") {
-    cardViewOffset.value = 0;
-    console.log("Resetting card filters to All (default)");
-    
-    cardViewResource.update({
-      params: {
-        filters: JSON.stringify({}),
-        limit: cardViewLimit.value,
-        offset: 0,
-        order_by: "modified desc"
-      }
-    });
-    cardViewResource.reload();
-  } else {
-    if (!listViewRef.value?.list) return;
-    const list = listViewRef.value.list;
-    const baseDefaultFilters = getBaseDefaultFilters();
-    
-    console.log("Resetting card filters to defaults:", baseDefaultFilters);
-    
-    list.submit({
-      ...list.params,
-      filters: baseDefaultFilters,
-      default_filters: baseDefaultFilters,
-    });
-  }
+// Excel of every ticket matching the current filters and search, across all pages
+function exportCardTickets() {
+  const filters = encodeURIComponent(JSON.stringify(requestFilters.value));
+  window.location.href = `/api/method/helpdesk.api.ticket.export_tickets?filters=${filters}`;
 }
 
-function applyQuickView(view: any) {
-  syncCardFiltersWithDefault();
-  activeQuickView.value = view.label;
-  
-  console.log("Applying quick view:", view.label, "Filters:", view.filters);
-  
-  const isAll = view.label === "All tickets";
-  const baseDefaultFilters = isAll ? {} : getBaseDefaultFilters();
-  let mergedFilters = { ...baseDefaultFilters, ...view.filters };
-  
-  // Preserve route filters (date, owner) when applying quick view
-  if (route.query.filters) {
+function loadCardViewTickets() {
+  cardViewResource.update({
+    params: {
+      filters: JSON.stringify(requestFilters.value),
+      limit: cardViewLimit.value,
+      offset: cardViewOffset.value,
+      order_by: "modified desc",
+    },
+  });
+  cardViewResource.reload();
+}
+
+// ?filters=... is the filter state: dashboard links open the list with it, and the list writes its
+// own filters back so refresh, Back and shared links keep them.
+let urlFilters = ""; // the last ?filters value read from or written to the URL
+
+watch(
+  () => route.query.filters,
+  (raw) => {
+    const value = raw ? String(raw) : "";
+    if (value === urlFilters) return; // our own router.replace
+    urlFilters = value;
+    let parsed = {};
     try {
-      const queryFilters = typeof route.query.filters === 'string' 
-        ? JSON.parse(route.query.filters) 
-        : route.query.filters;
-      
-      if (queryFilters.creation) {
-        mergedFilters.creation = queryFilters.creation;
-      }
-      if (queryFilters.owner) {
-        mergedFilters.owner = queryFilters.owner;
-      }
-    } catch (error) {
-      console.error("Error merging route filters in quick view:", error);
+      parsed = value ? JSON.parse(value) : {};
+    } catch {
+      parsed = {};
     }
-  }
+    const { state, leftovers } = fromRouteFilters(parsed);
+    clearCardFilters();
+    Object.assign(panelFilters, state);
+    routeLeftovers.value = leftovers;
+  },
+  { immediate: true }
+);
 
-  applyCardDateRangeFilters(mergedFilters);
-
-  if (viewMode.value === "card") {
+watch(
+  () => JSON.stringify(requestFilters.value),
+  () => {
     cardViewOffset.value = 0;
-    applyCardSearchFilter(mergedFilters);
-    cardViewResource.update({
-      params: {
-        filters: JSON.stringify(mergedFilters),
-        limit: cardViewLimit.value,
-        offset: 0,
-        order_by: "modified desc"
-      }
-    });
-    cardViewResource.reload();
-  } else {
-    if (!listViewRef.value?.list) return;
-    const list = listViewRef.value.list;
-
-    const params = {
-      ...list.params,
-      filters: mergedFilters,
-      default_filters: mergedFilters,
-    };
-
-    list.submit(params);
-    list.params = params;
-  }
-}
-
-function toggleValue(arr: string[], value: string) {
-  return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
-}
+    loadCardViewTickets();
+    const { search: _search, ...filters } = requestFilters.value;
+    const value = Object.keys(filters).length ? JSON.stringify(filters) : "";
+    if (value === urlFilters) return;
+    urlFilters = value;
+    const query = { ...route.query };
+    if (value) query.filters = value;
+    else delete query.filters;
+    router.replace({ query });
+  },
+  { immediate: true }
+);
 
 const slaStatusColorMap = {
   Fulfilled: "green",
@@ -1629,172 +1148,6 @@ function resetState() {
   selectedView = null;
 }
 
-// Watch viewMode and load data when switching to card view
-watch(viewMode, async (newMode, oldMode) => {
-  if (newMode === 'card') {
-    await nextTick();
-    console.log("Switched to card view, loading tickets");
-    cardViewOffset.value = 0;
-    // Set default "All" filter
-    cardFilters.status = [{ label: "All", value: "" }];
-    cardFilters.priority = [];
-    cardFilters.team = [];
-    cardFilters.agent = [];
-    cardFilters.owner = [];
-    cardFilters.ticketType = [];
-    activeQuickView.value = "";
-    loadCardViewTickets();
-  }
-});
-
-// Parse and apply filters from route query
-function applyFiltersFromRoute() {
-  console.log("applyFiltersFromRoute called, filtersApplied:", filtersApplied.value);
-  
-  // Prevent duplicate calls within same navigation
-  if (filtersApplied.value) {
-    console.log("Filters already applied, skipping duplicate");
-    return;
-  }
-  
-  if (route.query.filters) {
-    try {
-      let queryFilters = typeof route.query.filters === 'string' 
-        ? JSON.parse(route.query.filters) 
-        : route.query.filters;
-      
-      if (queryFilters && Object.keys(queryFilters).length > 0) {
-        filtersApplied.value = true;
-        // Normalize filter operators (convert LIKE to like, etc.) at the start
-        Object.keys(queryFilters).forEach(key => {
-          const filterValue = queryFilters[key];
-          if (Array.isArray(filterValue) && filterValue.length === 2) {
-            const operator = filterValue[0];
-            if (typeof operator === 'string') {
-              // Normalize operator to lowercase
-              queryFilters[key] = [operator.toLowerCase(), filterValue[1]];
-            }
-          }
-        });
-        
-        console.log("Applying filters from route (normalized):", queryFilters);
-        
-        // Set default filters for list view (this will be used by ListViewBuilder)
-        setDefaultFilters(queryFilters);
-        
-        // Sync card filters UI with route filters
-        if (queryFilters.status) {
-          const statusFilter = queryFilters.status;
-          if (Array.isArray(statusFilter) && statusFilter[0] === "in" && Array.isArray(statusFilter[1])) {
-            const statusValues = statusFilter[1];
-            const matchedStatuses = statusFilterOptions.value.filter(opt => 
-              statusValues.includes(opt.value)
-            );
-            if (matchedStatuses.length > 0) {
-              cardFilters.status = matchedStatuses;
-            }
-          } else if (typeof statusFilter === "string") {
-            const matchedStatus = statusFilterOptions.value.find(opt => opt.value === statusFilter);
-            if (matchedStatus) {
-              cardFilters.status = [matchedStatus];
-            }
-          }
-        }
-        
-        // Apply team filter if present
-        if (queryFilters.agent_group) {
-          const teamValue = Array.isArray(queryFilters.agent_group) 
-            ? queryFilters.agent_group[1]?.[0] 
-            : queryFilters.agent_group;
-          if (teamValue) {
-            const matchedTeam = teamFilterOptions.value.find(opt => opt.value === teamValue);
-            if (matchedTeam) {
-              cardFilters.team = [matchedTeam];
-            }
-          }
-        }
-
-        // Apply owner filter if present
-        if (queryFilters.owner) {
-          const ownerValue = Array.isArray(queryFilters.owner)
-            ? queryFilters.owner[1]?.[0] || queryFilters.owner[1]
-            : queryFilters.owner;
-          const matchedOwner = ownerFilterOptions.value.find(
-            (opt) => opt.value === ownerValue
-          );
-          if (matchedOwner) {
-            cardFilters.owner = [matchedOwner];
-          }
-        }
-        
-        // Apply agent filter if present
-        if (queryFilters._assign) {
-          const assignFilter = queryFilters._assign;
-          // Handle both "like" and "LIKE" (case insensitive)
-          const operator = Array.isArray(assignFilter) ? assignFilter[0]?.toLowerCase() : null;
-          if (operator === "like") {
-            const assignValue = assignFilter[1];
-            // Extract email from like pattern: %"email"% or %email%
-            let agentEmail = null;
-            const quotedMatch = assignValue.match(/%"([^"]+)"/);
-            if (quotedMatch) {
-              agentEmail = quotedMatch[1];
-            } else {
-              // Try without quotes
-              const unquotedMatch = assignValue.match(/%([^%]+)%/);
-              if (unquotedMatch) {
-                agentEmail = unquotedMatch[1];
-              }
-            }
-            if (agentEmail) {
-              const matchedAgent = agentFilterOptions.value.find(opt => opt.value === agentEmail);
-              if (matchedAgent) {
-                cardFilters.agent = [matchedAgent];
-              }
-            }
-          }
-        }
-        
-        // Apply filters based on view mode
-        if (viewMode.value === "card") {
-          cardViewOffset.value = 0;
-          loadCardViewTickets();
-        } else {
-          // For list view, wait for list to be ready then apply filters
-          nextTick(() => {
-            if (listViewRef.value?.list) {
-              const list = listViewRef.value.list;
-              console.log("Applying normalized route filters to list view:", queryFilters);
-              // Update params and submit to apply filters
-              list.params = {
-                ...list.params,
-                filters: queryFilters,
-                default_filters: queryFilters,
-              };
-              list.submit(list.params);
-            }
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing filters from route:", error);
-    }
-  } else {
-    // No filters in route, use default behavior
-    if (viewMode.value === "card" && !filtersApplied.value) {
-      filtersApplied.value = true;
-      cardFilters.status = [{ label: "All", value: "" }];
-      cardFilters.priority = [];
-      cardFilters.team = [];
-      cardFilters.agent = [];
-      cardFilters.owner = [];
-      cardFilters.ticketType = [];
-      activeQuickView.value = "";
-      loadCardViewTickets();
-    }
-  }
-}
-
 onMounted(() => {
   if (!route.query.view) {
     currentView.value = {
@@ -1811,36 +1164,12 @@ onMounted(() => {
       }
     });
   }
-  
-  // Apply filters from route query if present
-  applyFiltersFromRoute();
 });
-
-// Watch for route changes to apply filters
-watch(
-  () => route.query.filters,
-  (newFilters, oldFilters) => {
-    console.log("Route filters watcher triggered", { newFilters, oldFilters });
-    // Only process if filters actually changed
-    if (newFilters && JSON.stringify(newFilters) !== JSON.stringify(oldFilters)) {
-      console.log("Route filters changed, resetting applied flag");
-      filtersApplied.value = false;
-      applyFiltersFromRoute();
-    } else if (!newFilters && oldFilters) {
-      // Filters removed
-      console.log("Filters removed from route");
-      filtersApplied.value = false;
-    }
-  },
-  { immediate: false }
-);
 
 onUnmounted(() => {
   if (!isCustomerPortal.value) {
     $socket.off("helpdesk:new-ticket");
   }
-  // Reset filter flag on unmount
-  filtersApplied.value = false;
 });
 
 usePageMeta(() => {

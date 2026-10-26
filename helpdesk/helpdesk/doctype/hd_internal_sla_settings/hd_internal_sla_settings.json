@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "creation": "2026-10-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "warning_percent",
+  "business_days_section",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "business_days_column",
+  "friday",
+  "saturday",
+  "sunday",
+  "holidays_column",
+  "holiday_list",
+  "tiers_section",
+  "tiers",
+  "rules_section",
+  "rules",
+  "alerts_section",
+  "breach_recipients",
+  "send_email"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "80",
+   "description": "Tickets are flagged At Risk once this share of the target time has passed.",
+   "fieldname": "warning_percent",
+   "fieldtype": "Percent",
+   "label": "Warn At (% Elapsed)"
+  },
+  {
+   "description": "Targets in days count only these days and skip holidays. Minutes and hours run around the clock.",
+   "fieldname": "business_days_section",
+   "fieldtype": "Section Break",
+   "label": "Business Days"
+  },
+  {
+   "default": "1",
+   "fieldname": "monday",
+   "fieldtype": "Check",
+   "label": "Monday"
+  },
+  {
+   "default": "1",
+   "fieldname": "tuesday",
+   "fieldtype": "Check",
+   "label": "Tuesday"
+  },
+  {
+   "default": "1",
+   "fieldname": "wednesday",
+   "fieldtype": "Check",
+   "label": "Wednesday"
+  },
+  {
+   "default": "1",
+   "fieldname": "thursday",
+   "fieldtype": "Check",
+   "label": "Thursday"
+  },
+  {
+   "fieldname": "business_days_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "friday",
+   "fieldtype": "Check",
+   "label": "Friday"
+  },
+  {
+   "default": "1",
+   "fieldname": "saturday",
+   "fieldtype": "Check",
+   "label": "Saturday"
+  },
+  {
+   "default": "1",
+   "fieldname": "sunday",
+   "fieldtype": "Check",
+   "label": "Sunday"
+  },
+  {
+   "fieldname": "holidays_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "holiday_list",
+   "fieldtype": "Link",
+   "label": "Holiday List",
+   "options": "HD Service Holiday List"
+  },
+  {
+   "fieldname": "tiers_section",
+   "fieldtype": "Section Break",
+   "label": "Tiers"
+  },
+  {
+   "fieldname": "tiers",
+   "fieldtype": "Table",
+   "label": "Tiers",
+   "options": "HD Internal SLA Tier"
+  },
+  {
+   "description": "Checked top to bottom; the first matching rule sets a new ticket's tier. Empty columns match anything.",
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Rules"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules",
+   "options": "HD Internal SLA Rule"
+  },
+  {
+   "description": "Assigned agents are alerted when a ticket is at risk and when it breaches.",
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Alerts"
+  },
+  {
+   "description": "Also alerted when a ticket breaches, e.g. the CX Manager.",
+   "fieldname": "breach_recipients",
+   "fieldtype": "Table MultiSelect",
+   "label": "Breach Recipients",
+   "options": "HD Team Member"
+  },
+  {
+   "default": "1",
+   "fieldname": "send_email",
+   "fieldtype": "Check",
+   "label": "Also Send Email"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD Internal SLA Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Agent Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

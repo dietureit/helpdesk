@@ -39,6 +39,21 @@
           <span class="text-xs text-ink-gray-6">by {{ resolutionDate }}</span>
         </div>
       </div>
+      <div v-if="internalSla" class="flex items-start gap-2 py-2">
+        <span
+          class="mt-1 h-2 w-2 rounded-full"
+          :class="internalSla.dotClass"
+          aria-hidden="true"
+        />
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm font-medium text-ink-gray-8">
+            Internal SLA · {{ internalSla.tier }}
+          </span>
+          <span class="text-xs text-ink-gray-6">
+            {{ internalSla.status }} · due {{ internalSla.due }}
+          </span>
+        </div>
+      </div>
     </div>
     
   </div>
@@ -46,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import { dayjs } from "@/dayjs";
 import { TicketSymbol } from "@/types";
 import { dateFormat, dateTooltipFormat } from "@/utils";
 import { computed, inject } from "vue";
@@ -93,6 +109,33 @@ const firstResponseDate = computed(() => {
   const doc = ticket.value?.doc;
   const responseDate = doc?.first_responded_on || doc?.response_by;
   return responseDate ? dateFormat(responseDate, dateTooltipFormat) : "-";
+});
+
+const INTERNAL_SLA_DOT = {
+  "On Track": "bg-green-500",
+  "At Risk": "bg-orange-500",
+  Breached: "bg-red-500",
+  Met: "bg-surface-gray-6",
+};
+
+const internalSla = computed(() => {
+  const doc = ticket.value?.doc;
+  if (!doc?.internal_sla_due_by) return null;
+  let status = doc.internal_sla_status;
+  if (doc.investigation_status !== "Resolved") {
+    // the stored status only moves when the scheduler runs, so work it out from the due times
+    const now = dayjs();
+    if (!now.isBefore(dayjs.tz(doc.internal_sla_due_by))) status = "Breached";
+    else if (doc.internal_sla_warning_by && !now.isBefore(dayjs.tz(doc.internal_sla_warning_by)))
+      status = "At Risk";
+    else status = "On Track";
+  }
+  return {
+    tier: doc.internal_sla_tier,
+    status,
+    dotClass: INTERNAL_SLA_DOT[status] || "bg-surface-gray-6",
+    due: dateFormat(doc.internal_sla_due_by, dateTooltipFormat),
+  };
 });
 
 const resolutionDate = computed(() => {

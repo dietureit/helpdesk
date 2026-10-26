@@ -32,6 +32,14 @@
   "service_level_agreement_creation",
   "on_hold_since",
   "total_hold_time",
+  "internal_sla_section",
+  "investigation_status",
+  "investigation_resolved_on",
+  "internal_sla_tier",
+  "internal_sla_column",
+  "internal_sla_status",
+  "internal_sla_warning_by",
+  "internal_sla_due_by",
   "response_tab",
   "response",
   "first_response_time",
@@ -215,6 +223,58 @@
    "fieldname": "total_hold_time",
    "fieldtype": "Duration",
    "label": "Total Hold Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "internal_sla_section",
+   "fieldtype": "Section Break",
+   "label": "Internal SLA"
+  },
+  {
+   "fieldname": "investigation_status",
+   "fieldtype": "Select",
+   "label": "Investigation Status",
+   "no_copy": 1,
+   "options": "\nOpen\nResolved"
+  },
+  {
+   "fieldname": "investigation_resolved_on",
+   "fieldtype": "Datetime",
+   "label": "Investigation Resolved On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "internal_sla_tier",
+   "fieldtype": "Data",
+   "label": "Internal SLA Tier",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "internal_sla_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "internal_sla_status",
+   "fieldtype": "Select",
+   "label": "Internal SLA Status",
+   "no_copy": 1,
+   "options": "\nOn Track\nAt Risk\nBreached\nMet",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "internal_sla_warning_by",
+   "fieldtype": "Datetime",
+   "label": "Internal SLA Warning By",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "internal_sla_due_by",
+   "fieldtype": "Datetime",
+   "label": "Internal SLA Due By",
+   "no_copy": 1,
    "read_only": 1
   },
   {
@@ -448,7 +508,7 @@
  "icon": "fa fa-issue",
  "idx": 61,
  "links": [],
- "modified": "2025-12-14 22:54:35.101089",
+ "modified": "2026-10-22 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Ticket",

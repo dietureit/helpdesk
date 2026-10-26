@@ -40,6 +40,12 @@ scheduler_events = {
     "hourly": [
         "helpdesk.helpdesk.doctype.hd_report_schedule.hd_report_schedule.send_scheduled_reports"
     ],
+    "cron": {
+        # every minute: Tier 0 is a 15-minute target
+        "* * * * *": [
+            "helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings.scan_internal_sla"
+        ],
+    },
 }
 
 

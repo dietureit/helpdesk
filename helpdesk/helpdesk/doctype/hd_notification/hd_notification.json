@@ -39,7 +39,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "Assignment\nMention\nReaction\nTeam Assignment",
+   "options": "Assignment\nMention\nReaction\nTeam Assignment\nSLA Alert",
    "reqd": 1
   },
   {
@@ -82,7 +82,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-20 12:18:20.219347",
+ "modified": "2026-10-22 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Notification",

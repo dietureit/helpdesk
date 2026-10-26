@@ -452,6 +452,14 @@ def is_json_valid(json_string):
         return False
 
 
+def xlsx_rows(rows):
+    """Rows for frappe.utils.xlsxutils.make_xlsx: openpyxl turns a string starting with "=" into a formula."""
+    return [
+        [" " + cell if isinstance(cell, str) and cell.startswith("=") else cell for cell in row]
+        for row in rows
+    ]
+
+
 def is_version_16():
     from frappe.pulse.utils import get_frappe_version
 
