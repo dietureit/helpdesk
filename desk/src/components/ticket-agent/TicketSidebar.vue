@@ -5,7 +5,7 @@
       v-model="currentTab"
       class="tab-buttons mb-1 px-5 mt-3.5"
     />
-    <div class="flex-1 max-h-full">
+    <div class="flex-1 min-h-0 overflow-y-auto">
       <TicketDetailsTab v-if="currentTab === 'details'" />
       <TicketContactTab v-else />
     </div>
