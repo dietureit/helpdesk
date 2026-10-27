@@ -77,6 +77,9 @@ doc_events = {
     "ToDo": {
         "after_insert": "helpdesk.helpdesk.doctype.hd_notification.utils.notify_assignment_from_todo",
     },
+    "Notification Log": {
+        "before_insert": "helpdesk.overrides.notification_log.before_insert",
+    },
 }
 
 has_permission = {
