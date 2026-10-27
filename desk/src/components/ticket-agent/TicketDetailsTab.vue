@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="h-full overflow-y-hidden flex flex-1 flex-col justify-between overflow-hidden max-h-full"
-  >
+  <div class="flex flex-col">
     <div class="px-5 pb-4 flex flex-col">
       <!-- User avatar with buttons -->
       <TicketContact />
@@ -32,6 +30,30 @@
               (val:string) => handleFieldUpdate(field.fieldname, val,true)
             "
             />
+            <FormControl
+              v-if="field.fieldname === 'ticket_type' && categoryOptions.length > 1"
+              type="select"
+              class="form-control-core mt-3"
+              :label="__('Category')"
+              :options="categoryOptions"
+              :model-value="ticket.doc.custom_category || NONE"
+              :disabled="isTicketResolved"
+              @update:model-value="
+                (val: string) => handleFieldUpdate('custom_category', val === NONE ? '' : val, true)
+              "
+            />
+            <FormControl
+              v-if="field.fieldname === 'ticket_type' && ticket.doc.custom_category"
+              type="select"
+              class="form-control-core mt-3"
+              :label="__('Sub Category')"
+              :options="subCategoryOptions"
+              :model-value="ticket.doc.custom_sub_category || NONE"
+              :disabled="isTicketResolved"
+              @update:model-value="
+                (val: string) => handleFieldUpdate('custom_sub_category', val === NONE ? '' : val, true)
+              "
+            />
             <!-- not locked by isTicketResolved: departments investigate after the agent resolves -->
             <FormControl
               v-if="field.fieldname === 'status'"
@@ -51,10 +73,10 @@
               class="form-control-core mt-3"
               :label="__('Internal SLA Tier')"
               :options="tierOptions"
-              :model-value="ticket.doc.internal_sla_tier || NO_TIER"
+              :model-value="ticket.doc.internal_sla_tier || NONE"
               @update:model-value="
                 (val: string) =>
-                  handleFieldUpdate('internal_sla_tier', val === NO_TIER ? '' : val, true)
+                  handleFieldUpdate('internal_sla_tier', val === NONE ? '' : val, true)
               "
             />
           </template>
@@ -76,9 +98,8 @@
     </div>
 
     <!-- Additional Fields -->
-    <div class="border-t flex flex-col flex-1 h-full pb-3 overflow-y-hidden">
-      <!-- TODO: Hack of 80 % for now, will refactor -->
-      <div class="overflow-y-scroll max-h-[80%]">
+    <div class="border-t flex flex-col pb-3">
+      <div>
         <template v-for="field in customFields">
           <TicketField
             v-if="field.visible"
@@ -169,15 +190,32 @@ const showTierPicker = computed(
 );
 
 // frappe-ui's select drops options with an empty value
-const NO_TIER = "__none__";
+const NONE = "__none__";
 
 const tierOptions = computed(() => {
   const tiers: string[] = [...(internalSlaOptions.data?.tiers || [])];
   const current = ticket.value.doc.internal_sla_tier;
   if (current && !tiers.includes(current)) tiers.push(current); // renamed or removed in settings
   return [
-    { label: "No internal SLA", value: NO_TIER },
+    { label: "No internal SLA", value: NONE },
     ...tiers.map((tier) => ({ label: tier, value: tier })),
+  ];
+});
+
+const categories = computed<Record<string, string[]>>(
+  () => internalSlaOptions.data?.categories || {}
+);
+const categoryOptions = computed(() => [
+  { label: "—", value: NONE },
+  ...Object.keys(categories.value).map((c) => ({ label: c, value: c })),
+]);
+const subCategoryOptions = computed(() => {
+  const subs = [...(categories.value[ticket.value.doc.custom_category] || [])];
+  const current = ticket.value.doc.custom_sub_category;
+  if (current && !subs.includes(current)) subs.push(current); // renamed or removed in crm
+  return [
+    { label: "—", value: NONE },
+    ...subs.map((sub) => ({ label: sub, value: sub })),
   ];
 });
 
@@ -228,6 +266,8 @@ const customFields = computed(() => {
     "status",
     "investigation_status",
     "internal_sla_tier",
+    "custom_category",
+    "custom_sub_category",
   ];
   customFields = customFields.filter((f) => !_coreFields.includes(f.fieldname));
   let _customFields = customFields.map((f) => {
@@ -271,8 +311,10 @@ function handleFieldUpdate(
     const label = getField(fieldname)?.label || fieldname;
     notifyTicketUpdate(label, value as string);
   }
+  const values: Record<string, FieldValue> = { [fieldname]: value };
+  if (fieldname === "custom_category") values.custom_sub_category = ""; // a sub category belongs to one category
   ticket.value.setValue.submit(
-    { [fieldname]: value },
+    values,
     {
       onSuccess: () => {
         // TODO: emit the event for notification to listeners
