@@ -43,9 +43,21 @@ class HDTicketType(Document):
             row.label, row.fieldtype, row.options = df.label, df.fieldtype, df.options or ""
 
 
+def get_first_contact_fields(ticket_type: str) -> dict[str, dict]:
+    """{fieldname: {"required": bool}} for the fields the ticket type's form exposes, in form order.
+    Only live HD Ticket fields (a row whose custom field was deleted is skipped); anything else a client sends is dropped."""
+    meta = frappe.get_meta("HD Ticket")
+    rows = frappe.get_all(
+        "HD Ticket Type Field",
+        filters={"parent": ticket_type, "parenttype": "HD Ticket Type"},
+        fields=["fieldname", "required"],
+        order_by="idx",
+    )
+    return {row.fieldname: {"required": bool(cint(row.required))} for row in rows if meta.get_field(row.fieldname)}
+
+
 def get_first_contact_fieldnames(ticket_type: str) -> set[str]:
-    """Fields the ticket type's form exposes; anything else a client sends is dropped."""
-    return set(frappe.get_all("HD Ticket Type Field", filters={"parent": ticket_type}, pluck="fieldname"))
+    return set(get_first_contact_fields(ticket_type))
 
 
 @frappe.whitelist()
