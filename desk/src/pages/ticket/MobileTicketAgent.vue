@@ -5,10 +5,13 @@
         <Breadcrumbs :items="breadcrumbs" />
       </template>
       <template #right-header>
-        <div class="absolute right-0 pr-2">
+        <div class="absolute right-0 pr-2 flex items-center gap-1">
           <Dropdown :options="dropdownOptions">
             <template #default="{ open }">
-              <Button :label="ticket.data.status">
+              <Button
+                :label="`${__('Status')}: ${ticket.data.status}`"
+                :title="__('Status')"
+              >
                 <template #prefix>
                   <IndicatorIcon
                     :class="
@@ -25,6 +28,24 @@
                 </template>
               </Button>
             </template>
+          </Dropdown>
+          <Dropdown :options="investigationDropdownOptions">
+            <Button
+              :label="`${__('Inv')}: ${ticket.data.investigation_status || '—'}`"
+              :title="__('Investigation Status')"
+            >
+              <template #prefix>
+                <IndicatorIcon
+                  :class="
+                    ticket.data.investigation_status === 'Resolved'
+                      ? 'text-green-600'
+                      : ticket.data.investigation_status === 'Open'
+                        ? 'text-orange-500'
+                        : 'text-ink-gray-4'
+                  "
+                />
+              </template>
+            </Button>
           </Dropdown>
         </div>
       </template>
@@ -231,6 +252,7 @@ import { useScreenSize } from "@/composables/screen";
 import { globalStore } from "@/stores/globalStore";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { useUserStore } from "@/stores/user";
+import { __ } from "@/translation";
 import { TabObject, TicketTab } from "@/types";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
 import { useTelephonyStore } from "@/stores/telephony";
@@ -335,6 +357,27 @@ const dropdownOptions = computed(() =>
     icon: () =>
       h(IndicatorIcon, {
         class: o.parsed_color,
+      }),
+  }))
+);
+
+const investigationDropdownOptions = computed(() =>
+  [
+    { label: __("Clear"), value: "" },
+    { label: "Open", value: "Open" },
+    { label: "Resolved", value: "Resolved" },
+  ].map((o) => ({
+    label: o.label,
+    value: o.value,
+    onClick: () => updateTicket("investigation_status", o.value),
+    icon: () =>
+      h(IndicatorIcon, {
+        class:
+          o.value === "Resolved"
+            ? "text-green-600"
+            : o.value === "Open"
+              ? "text-orange-500"
+              : "text-ink-gray-4",
       }),
   }))
 );

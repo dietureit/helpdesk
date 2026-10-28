@@ -113,6 +113,9 @@
       :priority-options="priorityOptions"
       @row-click="emit('row-click', $event)"
       @update-status="(ticketId, value) => emit('update-status', ticketId, value)"
+      @update-investigation-status="
+        (ticketId, value) => emit('update-investigation-status', ticketId, value)
+      "
       @update-priority="
         (ticketId, value) => emit('update-priority', ticketId, value)
       "
@@ -355,6 +358,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: "row-click", ticketId: string): void;
   (e: "update-status", ticketId: string, value: string): void;
+  (e: "update-investigation-status", ticketId: string, value: string): void;
   (e: "update-priority", ticketId: string, value: string): void;
   (e: "load-more"): void;
   (e: "next-page"): void;

@@ -188,6 +188,7 @@ def get_tickets_for_card_view(
             "subject",
             "status",
             "status_category",
+            "investigation_status",
             "priority",
             "creation",
             "modified",

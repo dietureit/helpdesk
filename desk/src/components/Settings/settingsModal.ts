@@ -95,7 +95,8 @@ export const tabs = computed(() => {
           label: __("SLA Policies"),
           icon: markRaw(ShieldCheck),
           component: markRaw(Sla),
-          condition: () => auth.isAdmin || auth.isManager,
+          // Hidden from Settings popup (Internal SLA remains available).
+          condition: () => false,
         },
         {
           label: __("Internal SLA"),
@@ -136,7 +137,8 @@ export const tabs = computed(() => {
           label: __("Telephony"),
           icon: markRaw(PhoneIcon),
           component: markRaw(Telephony),
-          condition: () => auth.isAdmin || auth.isManager,
+          // Hidden from Settings popup.
+          condition: () => false,
         },
       ],
     },
@@ -149,6 +151,7 @@ export const tabs = computed(() => {
         if (item.condition && !item.condition()) return false;
         return true;
       });
+      if (!tab.items.length) return false;
     }
     return true;
   });

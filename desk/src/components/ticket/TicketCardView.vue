@@ -104,10 +104,30 @@
               <Dropdown :options="statusOptionsList(ticket)" placement="bottom-start">
                 <button
                   class="flex items-center gap-1.5 rounded-md px-0.5 py-1 text-ink-gray-9 transition-colors hover:text-ink-gray-8"
+                  :title="__('Status')"
                   @click.stop
                 >
+                  <span class="text-xs font-medium text-ink-gray-5">{{ __("Status") }}</span>
                   <span class="h-2.5 w-2.5 rounded-full" :class="statusDot(ticket)" />
                   <span class="font-medium">{{ statusLabel(ticket) }}</span>
+                  <LucideChevronDown class="h-3.5 w-3.5 text-ink-gray-6" />
+                </button>
+              </Dropdown>
+              <Dropdown
+                :options="investigationOptionsList(ticket)"
+                placement="bottom-start"
+              >
+                <button
+                  class="flex items-center gap-1.5 rounded-md px-0.5 py-1 text-ink-gray-9 transition-colors hover:text-ink-gray-8"
+                  :title="__('Investigation Status')"
+                  @click.stop
+                >
+                  <span class="text-xs font-medium text-ink-gray-5">{{ __("Inv") }}</span>
+                  <span
+                    class="h-2.5 w-2.5 rounded-full"
+                    :class="investigationDot(ticket)"
+                  />
+                  <span class="font-medium">{{ investigationLabel(ticket) }}</span>
                   <LucideChevronDown class="h-3.5 w-3.5 text-ink-gray-6" />
                 </button>
               </Dropdown>
@@ -137,6 +157,7 @@
 import EmptyState from "@/components/EmptyState.vue";
 import { dayjs } from "@/dayjs";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
+import { __ } from "@/translation";
 import { Dropdown, LoadingIndicator } from "frappe-ui";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -169,6 +190,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: "rowClick", ticketId: string): void;
   (e: "updateStatus", ticketId: string, value: string): void;
+  (e: "updateInvestigationStatus", ticketId: string, value: string): void;
   (e: "updatePriority", ticketId: string, value: string): void;
   (e: "empty-state-action"): void;
 }>();
@@ -181,6 +203,17 @@ function statusMeta(row: any) {
 
 function statusLabel(row: any) {
   return statusMeta(row)?.label_agent || row?.status;
+}
+
+function investigationLabel(row: any) {
+  return row?.investigation_status || "—";
+}
+
+function investigationDot(row: any) {
+  const value = row?.investigation_status;
+  if (value === "Resolved") return "bg-green-500";
+  if (value === "Open") return "bg-orange-500";
+  return "bg-ink-gray-4";
 }
 
 const createdText = (value?: string) =>
@@ -266,6 +299,17 @@ function statusOptionsList(row: any) {
   return (props.statusOptions || []).map((opt) => ({
     label: opt.label,
     onClick: () => emit("updateStatus", row.name, opt.value),
+  }));
+}
+
+function investigationOptionsList(row: any) {
+  return [
+    { label: __("Clear"), value: "" },
+    { label: "Open", value: "Open" },
+    { label: "Resolved", value: "Resolved" },
+  ].map((opt) => ({
+    label: opt.label,
+    onClick: () => emit("updateInvestigationStatus", row.name, opt.value),
   }));
 }
 

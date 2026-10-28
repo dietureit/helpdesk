@@ -97,20 +97,25 @@
       </div>
     </div>
 
-    <!-- Additional Fields -->
-    <div class="border-t flex flex-col pb-3">
-      <div>
-        <template v-for="field in customFields">
-          <TicketField
-            v-if="field.visible"
-            :key="field.fieldname"
-            :field="field"
-            :value="field.value"
-            @change="
-              ({ fieldname, value }) => handleFieldUpdate(fieldname, value)
-            "
-          />
-        </template>
+    <!-- Additional / complaint fields (grouped like Dieture Update Complaint) -->
+    <div class="border-t flex flex-col pb-4">
+      <div
+        v-for="(section, index) in customFieldSections"
+        :key="section.label"
+        :class="index > 0 ? 'border-t border-gray-100 mt-1' : ''"
+      >
+        <div
+          class="px-5 pt-3.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500"
+        >
+          {{ section.label }}
+        </div>
+        <TicketField
+          v-for="field in section.fields"
+          :key="field.fieldname"
+          :field="field"
+          :value="field.value"
+          @change="({ fieldname, value }) => handleFieldUpdate(fieldname, value)"
+        />
       </div>
     </div>
   </div>
@@ -122,6 +127,7 @@ import { parseField } from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
 import { useShortcut } from "@/composables/shortcuts";
 import { getMeta } from "@/stores/meta";
+import { __ } from "@/translation";
 import {
   ActivitiesSymbol,
   AssigneeSymbol,
@@ -249,6 +255,66 @@ const coreFields = computed(() => {
   return _coreFields;
 });
 
+/** Dieture complaint form order — section labels shown above matching template fields. */
+const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[] }[] = [
+  {
+    label: __("Complaints Overview"),
+    fieldnames: [
+      "custom_select_source",
+      "custom_select_channel",
+      "custom_select_type",
+      "custom_ticket_number",
+    ],
+  },
+  {
+    label: __("Customer Information"),
+    fieldnames: [
+      "custom_customer_type",
+      "custom_customer_phone",
+      "custom_customer_name",
+      "custom_customer_email",
+      "custom_account_status",
+      "custom_age",
+      "custom_gender",
+    ],
+  },
+  {
+    label: __("Complaints Classification"),
+    fieldnames: [
+      "custom_proof",
+      "custom_complaints_description",
+      "custom_department",
+      "custom_dish",
+      "custom_dish_complaint",
+      "custom_ingredients",
+      "custom_date_of_dish",
+    ],
+  },
+  {
+    label: __("Complaints Tracking"),
+    fieldnames: [
+      "custom_customer_request",
+      "custom_assigned_agent",
+      "custom_assigned_manager",
+      "custom_complaint_status",
+      "custom_solution",
+    ],
+  },
+];
+
+const CORE_SKIP = new Set([
+  "ticket_type",
+  "priority",
+  "customer",
+  "agent_group",
+  "subject",
+  "status",
+  "investigation_status",
+  "internal_sla_tier",
+  "custom_category",
+  "custom_sub_category",
+]);
+
 const customFields = computed(() => {
   const fieldsMeta = getFields();
   if (!fieldsMeta || fieldsMeta.length === 0) {
@@ -257,21 +323,12 @@ const customFields = computed(() => {
 
   if (!customizations.value.data || customizations.value.loading) return [];
   let customFields = customizations.value.data?.custom_fields || [];
-  const _coreFields = [
-    "ticket_type",
-    "priority",
-    "customer",
-    "agent_group",
-    "subject",
-    "status",
-    "investigation_status",
-    "internal_sla_tier",
-    "custom_category",
-    "custom_sub_category",
-  ];
-  customFields = customFields.filter((f) => !_coreFields.includes(f.fieldname));
+  customFields = customFields.filter((f) => !CORE_SKIP.has(f.fieldname));
   let _customFields = customFields.map((f) => {
     let fieldMeta = getField(f.fieldname);
+    if (!fieldMeta) {
+      return null;
+    }
 
     fieldMeta = parseField(fieldMeta, ticket.value.doc);
     // cant handle required depends on as we directly set the value in DB
@@ -279,7 +336,29 @@ const customFields = computed(() => {
 
     return getFieldInFormat(f, fieldMeta);
   });
-  return _customFields;
+  return _customFields.filter((f) => f && f.visible);
+});
+
+const customFieldSections = computed(() => {
+  const fields = customFields.value || [];
+  const byName = new Map(fields.map((f) => [f.fieldname, f]));
+  const used = new Set<string>();
+  const sections: { label: string; fields: typeof fields }[] = [];
+
+  for (const section of COMPLAINT_FIELD_SECTIONS) {
+    const sectionFields = section.fieldnames
+      .map((name) => byName.get(name))
+      .filter(Boolean);
+    if (!sectionFields.length) continue;
+    sectionFields.forEach((f) => used.add(f.fieldname));
+    sections.push({ label: section.label, fields: sectionFields });
+  }
+
+  const other = fields.filter((f) => !used.has(f.fieldname));
+  if (other.length) {
+    sections.push({ label: __("Additional Fields"), fields: other });
+  }
+  return sections;
 });
 
 function getFieldInFormat(fieldTemplate, fieldMeta) {

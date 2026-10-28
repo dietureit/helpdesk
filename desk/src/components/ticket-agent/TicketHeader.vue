@@ -54,7 +54,11 @@
         <!-- Status -->
         <Dropdown :options="statusDropdown" placement="right">
           <template #default="{ open }">
-            <Button :label="ticket.doc.status" ref="statusRef">
+            <Button
+              :label="`${__('Status')}: ${ticket.doc.status}`"
+              ref="statusRef"
+              :title="__('Status')"
+            >
               <template #prefix>
                 <IndicatorIcon
                   :class="
@@ -64,6 +68,17 @@
               </template>
             </Button>
           </template>
+        </Dropdown>
+        <!-- Investigation Status -->
+        <Dropdown :options="investigationDropdown" placement="right">
+          <Button
+            :label="investigationLabel"
+            :title="__('Investigation Status')"
+          >
+            <template #prefix>
+              <IndicatorIcon :class="investigationIndicatorClass" />
+            </template>
+          </Button>
         </Dropdown>
         <!-- Core Actions + Custom Actions -->
         <Dropdown
@@ -103,6 +118,7 @@ import {
 } from "@/types";
 import { HDTicketStatus } from "@/types/doctypes";
 import { getIcon } from "@/utils";
+import { __ } from "@/translation";
 import { Breadcrumbs, call, Dropdown, toast } from "frappe-ui";
 import {
   computed,
@@ -162,6 +178,53 @@ const statusDropdown = computed(() => {
     icon: () =>
       h(IndicatorIcon, {
         class: o.parsed_color,
+      }),
+  }));
+});
+
+const investigationLabel = computed(() => {
+  const value = ticket.value?.doc?.investigation_status || "—";
+  return `${__("Inv")}: ${value}`;
+});
+
+const investigationIndicatorClass = computed(() => {
+  const value = ticket.value?.doc?.investigation_status;
+  if (value === "Resolved") return "text-green-600";
+  if (value === "Open") return "text-orange-500";
+  return "text-ink-gray-4";
+});
+
+const investigationDropdown = computed(() => {
+  const options = [
+    { label: "—", value: "" },
+    { label: "Open", value: "Open" },
+    { label: "Resolved", value: "Resolved" },
+  ];
+  return options.map((o) => ({
+    label: o.label === "—" ? __("Clear") : o.label,
+    value: o.value,
+    onClick: () => {
+      const next = o.value;
+      const current = ticket.value.doc.investigation_status || "";
+      if (current === next) return;
+      notifyTicketUpdate("Investigation Status", next || "—");
+      ticket.value.setValue.submit(
+        { investigation_status: next },
+        {
+          onSuccess() {
+            activities.value.reload();
+          },
+        }
+      );
+    },
+    icon: () =>
+      h(IndicatorIcon, {
+        class:
+          o.value === "Resolved"
+            ? "text-green-600"
+            : o.value === "Open"
+              ? "text-orange-500"
+              : "text-ink-gray-4",
       }),
   }));
 });

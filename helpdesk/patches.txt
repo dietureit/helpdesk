@@ -37,3 +37,4 @@ helpdesk.patches.add_overdue_ticket_status
 helpdesk.patches.convert_overdue_to_open
 helpdesk.patches.add_ticket_type_team_assignment_rules
 helpdesk.patches.add_internal_sla_defaults
+helpdesk.patches.seed_complaint_fields_on_default_template

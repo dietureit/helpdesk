@@ -1500,6 +1500,12 @@ class HDTicket(Document):
                 "width": "8rem",
             },
             {
+                "label": "Investigation Status",
+                "type": "Select",
+                "key": "investigation_status",
+                "width": "10rem",
+            },
+            {
                 "label": "First response",
                 "type": "Datetime",
                 "key": "response_by",
@@ -1624,6 +1630,7 @@ class HDTicket(Document):
             "subject",
             "status",
             "status_category",
+            "investigation_status",
             "priority",
             "ticket_type",
             "agent_group",

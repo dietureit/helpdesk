@@ -85,6 +85,7 @@
       @empty-action="handleEmptyStateAction"
       @row-click="handleCardClick"
       @update-status="handleCardStatus"
+      @update-investigation-status="handleCardInvestigationStatus"
       @update-priority="handleCardPriority"
       @next-page="handleCardNextPage"
       @prev-page="handleCardPrevPage"
@@ -374,6 +375,19 @@ const options = {
             }
           ),
         ]);
+      },
+    },
+    investigation_status: {
+      custom: ({ item }) => {
+        if (!item) {
+          return h("span", { class: "px-2 text-ink-gray-4" }, "—");
+        }
+        const theme = item === "Resolved" ? "green" : item === "Open" ? "orange" : "gray";
+        return h(Badge, {
+          label: item,
+          theme,
+          variant: "outline",
+        });
       },
     },
     agreement_status: {
@@ -702,6 +716,10 @@ function handleCardClick(ticketId: string) {
 
 function handleCardStatus(ticketId: string, value: string) {
   updateTicketField(ticketId, "status", value);
+}
+
+function handleCardInvestigationStatus(ticketId: string, value: string) {
+  updateTicketField(ticketId, "investigation_status", value);
 }
 
 function handleCardPriority(ticketId: string, value: string) {
