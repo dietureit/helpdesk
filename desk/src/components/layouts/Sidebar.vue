@@ -422,13 +422,10 @@ const logo = h(
   null
 );
 
-const showOnboardingBanner = computed(() => {
-  return (
-    !isCustomerPortal.value &&
-    !isOnboardingStepsCompleted.value &&
-    authStore.isManager
-  );
-});
+// Onboarding panel/banner hidden from UI for now (re-enable by restoring the condition below).
+const showOnboardingBanner = computed(() => false);
+// Previous condition:
+// !isCustomerPortal.value && !isOnboardingStepsCompleted.value && authStore.isManager
 
 const steps = [
   {
@@ -675,7 +672,8 @@ async function getGeneralCategory() {
 
 function setUpOnboarding() {
   if (!authStore.isManager) return;
-  setUp(steps);
+  // Skip registering onboarding steps so the Getting Started panel does not open.
+  // setUp(steps);
   useShortcut({ key: "h", meta: true }, () => {
     showHelpModal.value = !showHelpModal.value;
   });

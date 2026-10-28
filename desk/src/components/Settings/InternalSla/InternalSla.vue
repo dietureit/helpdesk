@@ -114,7 +114,14 @@
               :options="['Minutes', 'Hours', 'Days']"
               :aria-label="__('Unit')"
             />
-            <FormControl v-model="tier.description" :placeholder="__('Applies to')" />
+            <MultiSelectCombobox
+              class="min-w-0"
+              :options="ticketTypeOptions"
+              :model-value="appliesToValue(tier)"
+              :multiple="true"
+              :placeholder="__('Applies to')"
+              @update:model-value="(value) => setAppliesTo(tier, value)"
+            />
             <Button
               variant="ghost"
               icon="x"
@@ -271,11 +278,13 @@
 
 <script setup lang="ts">
 import { Link } from "@/components";
+import MultiSelectCombobox from "@/components/frappe-ui/MultiSelectCombobox.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { __ } from "@/translation";
 import {
   Badge,
   Button,
+  createListResource,
   createResource,
   FormControl,
   LoadingIndicator,
@@ -288,6 +297,8 @@ import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucidePlus from "~icons/lucide/plus";
 import LucideX from "~icons/lucide/x";
 import { disableSettingModalOutsideClick } from "../settingsModal";
+
+type Option = { label: string; value: string };
 
 const WEEKDAYS = [
   "monday",
@@ -306,6 +317,37 @@ const fromOption = (value: string) => (value === ANY ? "" : value);
 const form = ref<Record<string, any> | null>(null);
 const savedForm = ref("");
 const categories = ref<Record<string, string[]>>({});
+
+const ticketTypeList = createListResource({
+  doctype: "HD Ticket Type",
+  auto: true,
+  fields: ["name"],
+  orderBy: "name asc",
+  pageLength: 999,
+});
+
+const ticketTypeOptions = computed<Option[]>(() =>
+  (ticketTypeList.data || []).map((row: { name: string }) => ({
+    label: row.name,
+    value: row.name,
+  }))
+);
+
+function appliesToValue(tier: { description?: string }): Option[] {
+  if (!tier.description?.trim()) return [];
+  return tier.description
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((value) => ({ label: value, value }));
+}
+
+function setAppliesTo(tier: { description?: string }, value: Option[] | null) {
+  tier.description = (value || [])
+    .map((option) => option?.value || "")
+    .filter(Boolean)
+    .join(", ");
+}
 
 function toForm(doc: Record<string, any>) {
   return {

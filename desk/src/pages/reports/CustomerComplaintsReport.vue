@@ -303,6 +303,8 @@ const detailColumns = computed(
     report.data?.columns?.detail || [
       { key: "date", label: "Date" },
       { key: "name", label: "Ticket" },
+      { key: "status", label: "Status" },
+      { key: "investigation_status", label: "Investigation Status" },
       { key: "contact_number", label: "Contact number" },
       { key: "customer_name", label: "Customer name" },
       { key: "complaint", label: "Complaint" },
@@ -408,6 +410,13 @@ function cellText(key: string, row: Record<string, any>) {
 function detailCellClass(key: string, row: Record<string, any>) {
   if (key === "investigation") {
     return row[key] === "Pending" ? "font-medium text-orange-600" : "font-medium text-green-700";
+  }
+  if (key === "investigation_status") {
+    if (row[key] === "Resolved") return "font-medium text-green-700";
+    if (row[key] === "Open") return "font-medium text-orange-600";
+  }
+  if (key === "status") {
+    return "font-medium text-gray-800";
   }
   return "";
 }

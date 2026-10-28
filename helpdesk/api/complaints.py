@@ -20,6 +20,8 @@ from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
 DETAIL_COLUMNS = (
     ("date", "Date"),
     ("name", "Ticket"),
+    ("status", "Status"),
+    ("investigation_status", "Investigation Status"),
     ("contact_number", "Contact number"),
     ("customer_name", "Customer name"),
     ("complaint", "Complaint"),
@@ -269,6 +271,7 @@ def _row_from_ticket(ticket: dict, comments: dict[str, str], resolved: set[str])
         "ticket_type": ticket.get("ticket_type") or "Unspecified",
         "agent_group": ticket.get("agent_group") or "",
         "status": ticket.get("status") or "",
+        "investigation_status": inv_status or "",
         "is_resolved": 1 if _is_resolved(ticket.get("status"), resolved) else 0,
     }
 
