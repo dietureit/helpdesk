@@ -1,5 +1,6 @@
 import LucideBarChart2 from "~icons/lucide/bar-chart-2";
 import LucideBookOpen from "~icons/lucide/book-open";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTimer from "~icons/lucide/timer";
@@ -15,6 +16,11 @@ export const agentPortalSidebarOptions = [
     label: "Monthly Report",
     icon: LucideBarChart2,
     to: "MonthlyReport",
+  },
+  {
+    label: "Customer Complaints",
+    icon: LucideClipboardList,
+    to: "CustomerComplaintsReport",
   },
   {
     label: "SLA Breaches",

@@ -123,6 +123,11 @@ const routes = [
     component: () => import("@/pages/reports/SlaBreachReport.vue"),
   },
   {
+    path: "/reports/customer-complaints",
+    name: "CustomerComplaintsReport",
+    component: () => import("@/pages/reports/CustomerComplaintsReport.vue"),
+  },
+  {
     path: "/call-logs",
     name: "CallLogs",
     component: () => import("@/pages/call-logs/CallLogs.vue"),
