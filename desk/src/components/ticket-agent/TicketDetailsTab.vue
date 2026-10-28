@@ -31,6 +31,18 @@
             "
             />
             <FormControl
+              v-if="field.fieldname === 'ticket_type' && subTypeOptions.length > 1"
+              type="select"
+              class="form-control-core mt-3"
+              :label="__('Sub Type')"
+              :options="subTypeOptions"
+              :model-value="ticket.doc.sub_type || NONE"
+              :disabled="isTicketResolved"
+              @update:model-value="
+                (val: string) => handleFieldUpdate('sub_type', val === NONE ? '' : val, true)
+              "
+            />
+            <FormControl
               v-if="field.fieldname === 'ticket_type' && categoryOptions.length > 1"
               type="select"
               class="form-control-core mt-3"
@@ -208,6 +220,26 @@ const tierOptions = computed(() => {
   ];
 });
 
+// Sub types and first contact fields configured on the HD Ticket Type
+const ticketTypeForms = createResource({
+  url: "helpdesk.helpdesk.doctype.hd_ticket_type.hd_ticket_type.get_ticket_type_forms",
+  cache: "TicketTypeForms",
+  auto: true,
+});
+const typeForm = computed(
+  () =>
+    ticketTypeForms.data?.[ticket.value.doc.ticket_type] || {
+      sub_types: [],
+      fields: [],
+    }
+);
+const subTypeOptions = computed(() => {
+  const subs: string[] = [...typeForm.value.sub_types];
+  const current = ticket.value.doc.sub_type;
+  if (current && !subs.includes(current)) subs.push(current); // renamed or removed on the ticket type
+  return [{ label: "—", value: NONE }, ...subs.map((s) => ({ label: s, value: s }))];
+});
+
 const categories = computed<Record<string, string[]>>(
   () => internalSlaOptions.data?.categories || {}
 );
@@ -311,6 +343,7 @@ const CORE_SKIP = new Set([
   "status",
   "investigation_status",
   "internal_sla_tier",
+  "sub_type",
   "custom_category",
   "custom_sub_category",
 ]);
@@ -323,7 +356,10 @@ const customFields = computed(() => {
 
   if (!customizations.value.data || customizations.value.loading) return [];
   let customFields = customizations.value.data?.custom_fields || [];
-  customFields = customFields.filter((f) => !CORE_SKIP.has(f.fieldname));
+  const firstContact = new Set(typeForm.value.fields.map((f) => f.fieldname));
+  customFields = customFields.filter(
+    (f) => !CORE_SKIP.has(f.fieldname) && !firstContact.has(f.fieldname)
+  );
   let _customFields = customFields.map((f) => {
     let fieldMeta = getField(f.fieldname);
     if (!fieldMeta) {
@@ -339,11 +375,29 @@ const customFields = computed(() => {
   return _customFields.filter((f) => f && f.visible);
 });
 
+/** Fields CS captures at first contact for this ticket type (HD Ticket Type → First Contact Fields). */
+const firstContactFields = computed(() => {
+  if (!getFields()?.length) return [];
+  return typeForm.value.fields
+    .map((f) => {
+      const fieldMeta = getField(f.fieldname);
+      if (!fieldMeta) return null;
+      return getFieldInFormat(f, parseField(fieldMeta, ticket.value.doc));
+    })
+    .filter((f) => f && f.visible);
+});
+
 const customFieldSections = computed(() => {
   const fields = customFields.value || [];
   const byName = new Map(fields.map((f) => [f.fieldname, f]));
   const used = new Set<string>();
   const sections: { label: string; fields: typeof fields }[] = [];
+  if (firstContactFields.value.length) {
+    sections.push({
+      label: __("First Contact (CS)"),
+      fields: firstContactFields.value,
+    });
+  }
 
   for (const section of COMPLAINT_FIELD_SECTIONS) {
     const sectionFields = section.fieldnames

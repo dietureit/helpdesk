@@ -93,6 +93,7 @@ class HDTicket(Document):
 
     def validate(self):
         self.validate_feedback()
+        self.validate_sub_type()
 
     def before_save(self):
         self.apply_sla()
@@ -307,6 +308,27 @@ class HDTicket(Document):
         settings = frappe.get_doc("HD Settings")
         ticket_type = settings.default_ticket_type or DEFAULT_TICKET_TYPE
         self.ticket_type = ticket_type
+
+    def validate_sub_type(self):
+        """A sub type must be one its ticket type defines. A type change drops a sub type that no longer fits;
+        a value that only went stale in the type's settings is kept."""
+        if not self.sub_type:
+            return
+        allowed = frappe.get_all(
+            "HD Ticket Sub Type",
+            filters={"parenttype": "HD Ticket Type", "parent": self.ticket_type},
+            pluck="sub_type",
+        )
+        if self.sub_type in allowed:
+            return
+        if self.is_new() or self.has_value_changed("sub_type"):
+            frappe.throw(
+                _("Sub Type {0} is not defined for Ticket Type {1}").format(
+                    frappe.bold(self.sub_type), frappe.bold(self.ticket_type)
+                )
+            )
+        if self.has_value_changed("ticket_type"):
+            self.sub_type = None
 
     def set_raised_by(self):
         self.raised_by = self.raised_by or frappe.session.user
