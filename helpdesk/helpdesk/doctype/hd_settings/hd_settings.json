@@ -18,6 +18,10 @@
   "base_support_rotation",
   "knowledge_base_section",
   "prefer_knowledge_base",
+  "messenger_categories_section",
+  "enquiry_sub_categories",
+  "column_break_subcat",
+  "assistance_sub_categories",
   "ticket_tab",
   "ticket_type_section",
   "default_ticket_type",
@@ -489,12 +493,35 @@
    "fieldname": "favicon",
    "fieldtype": "Attach Image",
    "label": "Favicon"
+  },
+  {
+   "fieldname": "messenger_categories_section",
+   "fieldtype": "Section Break",
+   "label": "Messenger Ticket Categories"
+  },
+  {
+   "default": "Product / Sales Enquiry, Delivery Areas / Timing Enquiry, Collab / B2B Sales Enquiry, Customer Feedback / Suggestion, Other Enquiries",
+   "description": "Comma separated. Sub Category options when the Category is Enquiry (CRM messenger and tickets). Complaint uses the HD Ticket Types.",
+   "fieldname": "enquiry_sub_categories",
+   "fieldtype": "Small Text",
+   "label": "Enquiry Sub Categories"
+  },
+  {
+   "fieldname": "column_break_subcat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Renewal Request, Date Change Request, Pause / Freeze / Resume Plan, Day Off Change Request, Plan Switch Request, Plan Transfer Request, Delivery Tracking Assistance, Tech Assistance, Other Administrative Assistance",
+   "description": "Comma separated. Sub Category options when the Category is Assistance.",
+   "fieldname": "assistance_sub_categories",
+   "fieldtype": "Small Text",
+   "label": "Assistance Sub Categories"
   }
  ],
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-16 11:46:00.714066",
+ "modified": "2026-10-28 22:21:05.895083",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",
