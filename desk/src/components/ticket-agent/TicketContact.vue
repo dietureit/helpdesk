@@ -8,19 +8,6 @@
       <div class="flex items-start gap-2 py-2">
         <span
           class="mt-1 h-2 w-2 rounded-full"
-          :class="firstResponseDotClass"
-          aria-hidden="true"
-        />
-        <div class="flex flex-col gap-0.5">
-          <span class="text-sm font-medium text-ink-gray-8">
-            {{ firstResponseLabel }}
-          </span>
-          <span class="text-xs text-ink-gray-6">by {{ firstResponseDate }}</span>
-        </div>
-      </div>
-      <div class="flex items-start gap-2 py-2">
-        <span
-          class="mt-1 h-2 w-2 rounded-full"
           :class="resolutionDotClass"
           aria-hidden="true"
         />
@@ -73,13 +60,6 @@ const statusLabel = computed(() => {
   return doc?.status_category || doc?.status || "-";
 });
 
-const firstResponseLabel = computed(() => {
-  const doc = ticket.value?.doc;
-  if (!doc) return "First Response Due";
-  if (doc.first_responded_on) return "First Response";
-  return "First Response Due";
-});
-
 const resolutionLabel = computed(() => {
   const doc = ticket.value?.doc;
   if (!doc) return "Resolution Due";
@@ -89,26 +69,12 @@ const resolutionLabel = computed(() => {
   return "Resolution Due";
 });
 
-const firstResponseDotClass = computed(() => {
-  const doc = ticket.value?.doc;
-  if (doc?.first_responded_on) {
-    return "bg-red-500";
-  }
-  return "bg-red-500";
-});
-
 const resolutionDotClass = computed(() => {
   const doc = ticket.value?.doc;
   if (doc?.resolution_date || doc?.agreement_status === "Fulfilled") {
     return "bg-surface-gray-6";
   }
   return "bg-green-500";
-});
-
-const firstResponseDate = computed(() => {
-  const doc = ticket.value?.doc;
-  const responseDate = doc?.first_responded_on || doc?.response_by;
-  return responseDate ? dateFormat(responseDate, dateTooltipFormat) : "-";
 });
 
 const INTERNAL_SLA_DOT = {

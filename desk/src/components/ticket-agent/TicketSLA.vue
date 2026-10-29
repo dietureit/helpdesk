@@ -35,23 +35,6 @@
       </div>
       <!-- divider -->
       <div class="border-l border-outline-gray-2 h-[13px]" />
-      <!-- First Response -->
-      <div class="flex items-center gap-1">
-        <span>First Response</span>
-        <Tooltip
-          :text="dateFormat(firstResponse.date, dateTooltipFormat)"
-          :hover-delay="0.25"
-          :placement="'top'"
-        >
-          <Badge
-            :label="firstResponse.label"
-            variant="subtle"
-            :theme="firstResponse.color"
-          />
-        </Tooltip>
-      </div>
-      <!-- divider -->
-      <div class="border-l border-outline-gray-2 h-[13px]" />
       <!-- Resolution by -->
       <div class="flex items-center gap-1">
         <span>Resolution </span>
@@ -88,45 +71,6 @@ import { Badge, dayjs, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 
 const ticket = inject(TicketSymbol);
-
-const firstResponse = computed(() => {
-  if (ticket.value?.get?.loading) return { label: "", color: "", date: "" };
-  if (
-    !ticket.value.doc.first_responded_on &&
-    dayjs().isBefore(dayjs(ticket.value.doc.response_by))
-  ) {
-    let responseBy = formatTimeShort(ticket.value.doc.response_by);
-    return {
-      label: `Due in ${responseBy}`,
-      color: "orange",
-      date: ticket.value.doc.response_by,
-    };
-  } else if (
-    dayjs(ticket.value.doc.first_responded_on).isBefore(
-      dayjs(ticket.value.doc.response_by)
-    )
-  ) {
-    let responseBy = formatTimeShort(
-      ticket.value.doc.first_responded_on,
-      ticket.value.doc.creation
-    );
-    return {
-      label: `Fulfilled in ${responseBy}`,
-      color: "green",
-      date: ticket.value.doc.first_responded_on,
-    };
-  } else {
-    let responseBy = formatTimeShort(
-      String(new Date()),
-      ticket.value.doc.response_by
-    );
-    return {
-      label: `Failed by ${responseBy}`,
-      color: "red",
-      date: ticket.value.doc.response_by,
-    };
-  }
-});
 
 const resolutionBy = computed(() => {
   if (ticket.value?.get?.loading) return { label: "", color: "", date: "" };

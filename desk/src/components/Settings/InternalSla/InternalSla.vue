@@ -114,14 +114,7 @@
               :options="['Minutes', 'Hours', 'Days']"
               :aria-label="__('Unit')"
             />
-            <MultiSelectCombobox
-              class="min-w-0"
-              :options="ticketTypeOptions"
-              :model-value="appliesToValue(tier)"
-              :multiple="true"
-              :placeholder="__('Applies to')"
-              @update:model-value="(value) => setAppliesTo(tier, value)"
-            />
+            <FormControl v-model="tier.description" :placeholder="__('Description (optional)')" />
             <Button
               variant="ghost"
               icon="x"
@@ -151,11 +144,12 @@
             </Button>
           </div>
           <div
-            class="grid grid-cols-[repeat(5,minmax(0,1fr))_auto] gap-2 text-xs text-ink-gray-6"
+            class="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] gap-2 text-xs text-ink-gray-6"
           >
             <span>{{ __("Category") }}</span>
             <span>{{ __("Sub category") }}</span>
             <span>{{ __("Ticket type") }}</span>
+            <span>{{ __("Sub type") }}</span>
             <span>{{ __("Team") }}</span>
             <span>{{ __("Tier") }}</span>
             <span class="w-24" />
@@ -163,7 +157,7 @@
           <div
             v-for="(rule, index) in form.rules"
             :key="index"
-            class="grid grid-cols-[repeat(5,minmax(0,1fr))_auto] items-center gap-2"
+            class="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] items-center gap-2"
           >
             <FormControl
               type="select"
@@ -184,7 +178,24 @@
               :model-value="rule.sub_category || ANY"
               @update:model-value="(value: string) => (rule.sub_category = fromOption(value))"
             />
-            <Link v-model="rule.ticket_type" doctype="HD Ticket Type" :placeholder="__('Any')" />
+            <Link
+              doctype="HD Ticket Type"
+              :placeholder="__('Any')"
+              :model-value="rule.ticket_type"
+              @update:model-value="
+                (value: string) => {
+                  if (value !== rule.ticket_type) rule.sub_type = ''; // a sub type belongs to one type
+                  rule.ticket_type = value;
+                }
+              "
+            />
+            <FormControl
+              type="select"
+              :options="subTypeOptions(rule.ticket_type)"
+              :aria-label="__('Sub type')"
+              :model-value="rule.sub_type || ANY"
+              @update:model-value="(value: string) => (rule.sub_type = fromOption(value))"
+            />
             <Link v-model="rule.team" doctype="HD Team" :placeholder="__('Any')" />
             <FormControl
               type="select"
@@ -278,13 +289,11 @@
 
 <script setup lang="ts">
 import { Link } from "@/components";
-import MultiSelectCombobox from "@/components/frappe-ui/MultiSelectCombobox.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { __ } from "@/translation";
 import {
   Badge,
   Button,
-  createListResource,
   createResource,
   FormControl,
   LoadingIndicator,
@@ -318,35 +327,19 @@ const form = ref<Record<string, any> | null>(null);
 const savedForm = ref("");
 const categories = ref<Record<string, string[]>>({});
 
-const ticketTypeList = createListResource({
-  doctype: "HD Ticket Type",
+// ticket type -> { sub_types } (the same forms the ticket dialog and Details tab use)
+const typeForms = ref<Record<string, { sub_types?: string[] }>>({});
+createResource({
+  url: "helpdesk.helpdesk.doctype.hd_ticket_type.hd_ticket_type.get_ticket_type_forms",
   auto: true,
-  fields: ["name"],
-  orderBy: "name asc",
-  pageLength: 999,
+  onSuccess: (data) => (typeForms.value = data || {}),
 });
 
-const ticketTypeOptions = computed<Option[]>(() =>
-  (ticketTypeList.data || []).map((row: { name: string }) => ({
-    label: row.name,
-    value: row.name,
-  }))
-);
-
-function appliesToValue(tier: { description?: string }): Option[] {
-  if (!tier.description?.trim()) return [];
-  return tier.description
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((value) => ({ label: value, value }));
-}
-
-function setAppliesTo(tier: { description?: string }, value: Option[] | null) {
-  tier.description = (value || [])
-    .map((option) => option?.value || "")
-    .filter(Boolean)
-    .join(", ");
+function subTypeOptions(ticketType: string): Option[] {
+  const subTypes = ticketType
+    ? typeForms.value[ticketType]?.sub_types || []
+    : [...new Set(Object.values(typeForms.value).flatMap((form) => form.sub_types || []))];
+  return [{ label: __("Any"), value: ANY }, ...subTypes.map((sub) => ({ label: sub, value: sub }))];
 }
 
 function toForm(doc: Record<string, any>) {
@@ -365,6 +358,7 @@ function toForm(doc: Record<string, any>) {
       category: row.category || "",
       sub_category: row.sub_category || "",
       ticket_type: row.ticket_type || "",
+      sub_type: row.sub_type || "",
       team: row.team || "",
       tier: row.tier || "",
     })),
@@ -451,7 +445,14 @@ function addTier() {
 }
 
 function addRule() {
-  form.value!.rules.push({ category: "", sub_category: "", ticket_type: "", team: "", tier: "" });
+  form.value!.rules.push({
+    category: "",
+    sub_category: "",
+    ticket_type: "",
+    sub_type: "",
+    team: "",
+    tier: "",
+  });
 }
 
 function moveRule(index: number, step: number) {

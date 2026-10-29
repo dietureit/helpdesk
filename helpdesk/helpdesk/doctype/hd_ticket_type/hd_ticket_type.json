@@ -11,7 +11,10 @@
  "field_order": [
   "is_system",
   "description",
-  "priority"
+  "priority",
+  "ticket_form_section",
+  "sub_types",
+  "first_contact_fields"
  ],
  "fields": [
   {
@@ -32,10 +35,29 @@
    "fieldtype": "Check",
    "label": "System",
    "read_only": 1
+  },
+  {
+   "fieldname": "ticket_form_section",
+   "fieldtype": "Section Break",
+   "label": "Ticket Form"
+  },
+  {
+   "description": "Issue types an agent can pick after choosing this ticket type, e.g. Taste, Undercooked, Burnt.",
+   "fieldname": "sub_types",
+   "fieldtype": "Table",
+   "label": "Sub Types",
+   "options": "HD Ticket Sub Type"
+  },
+  {
+   "description": "HD Ticket fields the agent fills in when logging a ticket of this type. Shown in the messenger ticket form and on the ticket's Details tab.",
+   "fieldname": "first_contact_fields",
+   "fieldtype": "Table",
+   "label": "First Contact Fields",
+   "options": "HD Ticket Type Field"
   }
  ],
  "links": [],
- "modified": "2025-02-17 17:19:18.747328",
+ "modified": "2026-10-28 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Ticket Type",

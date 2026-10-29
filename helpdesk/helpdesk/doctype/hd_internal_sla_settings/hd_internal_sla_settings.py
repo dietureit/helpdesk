@@ -26,6 +26,7 @@ RULE_FIELDS = {
     "category": "custom_category",
     "sub_category": "custom_sub_category",
     "ticket_type": "ticket_type",
+    "sub_type": "sub_type",
     "team": "agent_group",
 }
 

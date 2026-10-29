@@ -18,6 +18,10 @@
   "base_support_rotation",
   "knowledge_base_section",
   "prefer_knowledge_base",
+  "messenger_categories_section",
+  "enquiry_sub_categories",
+  "column_break_subcat",
+  "assistance_sub_categories",
   "ticket_tab",
   "ticket_type_section",
   "default_ticket_type",
@@ -75,7 +79,14 @@
   "reply_email_to_agent_content",
   "reply_from_agent_section",
   "enable_reply_email_via_agent",
-  "reply_via_agent_email_content"
+  "reply_via_agent_email_content",
+  "ai_tab",
+  "ticket_ai_section",
+  "enable_ticket_ai_draft",
+  "ticket_ai_base_url",
+  "ticket_ai_model",
+  "column_break_ticket_ai",
+  "ticket_ai_api_key"
  ],
  "fields": [
   {
@@ -489,12 +500,76 @@
    "fieldname": "favicon",
    "fieldtype": "Attach Image",
    "label": "Favicon"
+  },
+  {
+   "fieldname": "messenger_categories_section",
+   "fieldtype": "Section Break",
+   "label": "Messenger Ticket Categories"
+  },
+  {
+   "default": "Product / Sales Enquiry, Delivery Areas / Timing Enquiry, Collab / B2B Sales Enquiry, Customer Feedback / Suggestion, Other Enquiries",
+   "description": "Comma separated. Sub Category options when the Category is Enquiry (CRM messenger and tickets). Complaint uses the HD Ticket Types.",
+   "fieldname": "enquiry_sub_categories",
+   "fieldtype": "Small Text",
+   "label": "Enquiry Sub Categories"
+  },
+  {
+   "fieldname": "column_break_subcat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Renewal Request, Date Change Request, Pause / Freeze / Resume Plan, Day Off Change Request, Plan Switch Request, Plan Transfer Request, Delivery Tracking Assistance, Tech Assistance, Other Administrative Assistance",
+   "description": "Comma separated. Sub Category options when the Category is Assistance.",
+   "fieldname": "assistance_sub_categories",
+   "fieldtype": "Small Text",
+   "label": "Assistance Sub Categories"
+  },
+  {
+   "fieldname": "ai_tab",
+   "fieldtype": "Tab Break",
+   "label": "AI"
+  },
+  {
+   "description": "Drafts the subject, details and type of a new ticket from the chat when an agent opens the create-ticket dialog in the CRM messenger.",
+   "fieldname": "ticket_ai_section",
+   "fieldtype": "Section Break",
+   "label": "Ticket Draft (CRM Messenger)"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_ticket_ai_draft",
+   "fieldtype": "Check",
+   "label": "Enable AI ticket draft"
+  },
+  {
+   "default": "https://openrouter.ai/api/v1",
+   "description": "OpenAI-compatible chat completions API. OpenRouter by default.",
+   "fieldname": "ticket_ai_base_url",
+   "fieldtype": "Data",
+   "label": "Base URL"
+  },
+  {
+   "default": "openai/gpt-4.1",
+   "description": "Any chat model the provider offers, for example openai/gpt-4.1 or openai/gpt-4.1-mini.",
+   "fieldname": "ticket_ai_model",
+   "fieldtype": "Data",
+   "label": "Model"
+  },
+  {
+   "fieldname": "column_break_ticket_ai",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Stored encrypted and only ever sent from the server to the provider.",
+   "fieldname": "ticket_ai_api_key",
+   "fieldtype": "Password",
+   "label": "API Key"
   }
  ],
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-16 11:46:00.714066",
+ "modified": "2026-10-29 00:59:40.026427",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",

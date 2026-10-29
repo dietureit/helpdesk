@@ -27,14 +27,12 @@ EDITABLE_FIELDS = (
 
 
 def get_categories():
-    """Category -> sub-categories (HD Ticket Types; crm installed)."""
+    """Category -> sub-categories (crm owns the lists; empty when crm is not installed)."""
     try:
-        from crm.api.messenger import TICKET_CATEGORIES, get_hd_ticket_type_options
+        from crm.api.messenger import get_ticket_categories
     except ImportError:
         return {}
-    # TICKET_CATEGORIES is a tuple of top-level names; Sub Category = live HD Ticket Types.
-    types = get_hd_ticket_type_options()
-    return {category: list(types) for category in TICKET_CATEGORIES}
+    return get_ticket_categories()
 
 
 def check_manager():

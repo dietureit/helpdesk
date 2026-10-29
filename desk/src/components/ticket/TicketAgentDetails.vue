@@ -42,55 +42,9 @@ const props = defineProps({
   },
 });
 
-let firstResponseInterval = null;
 let resolutionInterval = null;
 
-const firstResponseSeconds = ref(0);
 const resolutionSeconds = ref(0);
-
-const firstResponseBadge = computed(() => {
-  let firstResponse = null;
-  if (
-    !props.ticket.first_responded_on &&
-    dayjs().isBefore(dayjs(props.ticket.response_by))
-  ) {
-    let responseBy = formatTime(
-      dayjs(props.ticket.response_by).diff(dayjs(), "s")
-    );
-    if (firstResponseInterval) {
-      clearInterval(firstResponseInterval);
-      firstResponseInterval = null;
-    }
-    handleFirstResponseInterval(responseBy);
-    firstResponse = {
-      label: `Due in ${formatTime(firstResponseSeconds.value)}`,
-      color: "orange",
-      date: props.ticket.response_by,
-    };
-  } else if (
-    dayjs(props.ticket.first_responded_on).isBefore(
-      dayjs(props.ticket.response_by)
-    )
-  ) {
-    firstResponse = {
-      label: `Fulfilled in ${formatTime(
-        dayjs(props.ticket.first_responded_on).diff(
-          dayjs(props.ticket.creation),
-          "s"
-        )
-      )}`,
-      color: "green",
-      date: props.ticket.first_responded_on,
-    };
-  } else {
-    firstResponse = {
-      label: "Failed",
-      color: "red",
-      date: props.ticket.response_by,
-    };
-  }
-  return firstResponse;
-});
 
 const resolutionBadge = computed(() => {
   let resolution = null;
@@ -152,12 +106,6 @@ function getCalculatedResolution() {
 
 const sections = computed(() => [
   {
-    label: "First Response",
-    tooltipValue: dateFormat(firstResponseBadge.value.date, dateTooltipFormat),
-    badgeText: firstResponseBadge.value.label,
-    badgeColor: firstResponseBadge.value.color,
-  },
-  {
     label: "Resolution",
     tooltipValue: dateFormat(resolutionBadge.value.date, dateTooltipFormat),
     badgeText: resolutionBadge.value.label,
@@ -174,10 +122,6 @@ watch(
   () => props.ticket,
   (ticket: any) => {
     if (ticket.status_category !== "Open") {
-      if (firstResponseInterval) {
-        clearInterval(firstResponseInterval);
-        firstResponseInterval = null;
-      }
       if (resolutionInterval) {
         clearInterval(resolutionInterval);
         resolutionInterval = null;
@@ -186,21 +130,6 @@ watch(
   },
   { deep: true, immediate: true }
 );
-
-function handleFirstResponseInterval(time: string) {
-  if (!time) return;
-  if (props.ticket.status_category !== "Open") {
-    return;
-  }
-  firstResponseSeconds.value = getTimeInSeconds(time);
-  firstResponseInterval = setInterval(() => {
-    if (firstResponseSeconds.value <= 0) {
-      clearInterval(firstResponseInterval);
-      return;
-    }
-    firstResponseSeconds.value--;
-  }, 1000);
-}
 
 function handleResolutionInterval(time: string) {
   if (!time) return;
@@ -219,13 +148,9 @@ function handleResolutionInterval(time: string) {
 }
 
 onUnmounted(() => {
-  if (firstResponseInterval) {
-    clearInterval(firstResponseInterval);
-  }
   if (resolutionInterval) {
     clearInterval(resolutionInterval);
   }
-  firstResponseInterval = null;
   resolutionInterval = null;
 });
 </script>

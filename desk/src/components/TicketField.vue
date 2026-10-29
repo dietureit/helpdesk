@@ -210,6 +210,8 @@ const component = computed(() => {
   } else if (props.field.fieldtype === "Date") {
     return h(DatePicker, {
       id: props.field.fieldname,
+      // transValue hands over the site-formatted date; without the format the picker can't parse it and shows blank
+      format: window.date_format?.toUpperCase(),
     });
   } else {
     return h(FormControl);
