@@ -24,6 +24,7 @@ def make_settings():
             ],
             "rules": [
                 {"category": "Enquiry"},
+                {"ticket_type": "Quality", "sub_type": "Illness", "tier": "Fast"},
                 {"team": "Delivery Issues", "tier": "Fast"},
                 {"ticket_type": "Technical", "tier": "Slow"},
             ],
@@ -63,6 +64,9 @@ class TestHDInternalSLASettings(FrappeTestCase):
         self.assertIsNone(match(custom_category="Enquiry", agent_group="Delivery Issues"))
         self.assertEqual(match(custom_category="Complaint", agent_group="Delivery Issues"), "Fast")
         self.assertEqual(match(ticket_type="Technical", agent_group="Other Issues"), "Slow")
+        self.assertEqual(match(ticket_type="Quality", sub_type="Illness"), "Fast")
+        self.assertIsNone(match(ticket_type="Quality", sub_type="Spoilage"))
+        self.assertIsNone(match(ticket_type="Problem", sub_type="Illness"))
         self.assertIsNone(match())
 
     def test_get_status(self):
