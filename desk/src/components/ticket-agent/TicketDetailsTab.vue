@@ -311,26 +311,8 @@ const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[] }[] = [
     ],
   },
   {
-    label: __("Complaints Classification"),
-    fieldnames: [
-      "custom_proof",
-      "custom_complaints_description",
-      "custom_department",
-      "custom_dish",
-      "custom_dish_complaint",
-      "custom_ingredients",
-      "custom_date_of_dish",
-    ],
-  },
-  {
     label: __("Complaints Tracking"),
-    fieldnames: [
-      "custom_customer_request",
-      "custom_assigned_agent",
-      "custom_assigned_manager",
-      "custom_complaint_status",
-      "custom_solution",
-    ],
+    fieldnames: ["custom_solution"],
   },
 ];
 
@@ -348,6 +330,22 @@ const CORE_SKIP = new Set([
   "custom_sub_category",
 ]);
 
+// Template fields left out: the classification ones belong to the ticket type's form (First Contact),
+// and the tracking selects store their first option ("Misleading Message", "CLOSED") on every ticket.
+const LEGACY_SKIP = new Set([
+  "custom_proof",
+  "custom_complaints_description",
+  "custom_department",
+  "custom_dish",
+  "custom_dish_complaint",
+  "custom_ingredients",
+  "custom_date_of_dish",
+  "custom_customer_request",
+  "custom_assigned_agent",
+  "custom_assigned_manager",
+  "custom_complaint_status",
+]);
+
 const customFields = computed(() => {
   const fieldsMeta = getFields();
   if (!fieldsMeta || fieldsMeta.length === 0) {
@@ -358,7 +356,10 @@ const customFields = computed(() => {
   let customFields = customizations.value.data?.custom_fields || [];
   const firstContact = new Set(typeForm.value.fields.map((f) => f.fieldname));
   customFields = customFields.filter(
-    (f) => !CORE_SKIP.has(f.fieldname) && !firstContact.has(f.fieldname)
+    (f) =>
+      !CORE_SKIP.has(f.fieldname) &&
+      !LEGACY_SKIP.has(f.fieldname) &&
+      !firstContact.has(f.fieldname)
   );
   let _customFields = customFields.map((f) => {
     let fieldMeta = getField(f.fieldname);
@@ -382,7 +383,8 @@ const firstContactFields = computed(() => {
     .map((f) => {
       const fieldMeta = getField(f.fieldname);
       if (!fieldMeta) return null;
-      return getFieldInFormat(f, parseField(fieldMeta, ticket.value.doc));
+      // Picked for this type's form, so the doctype's hidden flag doesn't apply (the CRM dialog shows it too).
+      return getFieldInFormat(f, { ...parseField(fieldMeta, ticket.value.doc), hidden: 0 });
     })
     .filter((f) => f && f.visible);
 });

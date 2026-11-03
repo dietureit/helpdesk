@@ -45,7 +45,7 @@ export interface HDTicketStatus extends DocType {
   parsed_color?: string;
 }
 
-// Last updated: 2026-10-22 18:00:00.000000
+// Last updated: 2026-10-28 20:00:00.000000
 export interface HDTicket extends DocType {
   /** Subject: Data */
   subject: string;
@@ -57,6 +57,8 @@ export interface HDTicket extends DocType {
   priority?: string;
   /** Ticket Type: Link (HD Ticket Type) */
   ticket_type: string;
+  /** Sub Type: Data */
+  sub_type?: string;
   /** Team: Link (HD Team) */
   agent_group?: string;
   /** Ticket Split From: Link (HD Ticket) */

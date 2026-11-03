@@ -51,6 +51,16 @@
             </Dropdown>
           </div>
         </div>
+        <!-- CRM chat the ticket was created from -->
+        <Button
+          v-if="ticket.doc.custom_messenger_conversation"
+          :label="__('Open Conversation')"
+          :link="`/crm/messenger/${encodeURIComponent(ticket.doc.custom_messenger_conversation)}`"
+        >
+          <template #prefix>
+            <LucideMessageCircle class="size-4" />
+          </template>
+        </Button>
         <!-- Status -->
         <Dropdown :options="statusDropdown" placement="right">
           <template #default="{ open }">
@@ -133,6 +143,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideMerge from "~icons/lucide/merge";
+import LucideMessageCircle from "~icons/lucide/message-circle";
 import { IndicatorIcon } from "../icons";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSLA from "./TicketSLA.vue";
