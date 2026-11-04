@@ -12,7 +12,7 @@ from datetime import timedelta
 import frappe
 from bs4 import BeautifulSoup
 from frappe import _
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, add_months, getdate, nowdate
 from frappe.utils.xlsxutils import make_xlsx
 
 from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
@@ -29,12 +29,14 @@ DETAIL_COLUMNS = (
     ("resolution_by_cs", "Resolution by CS"),
     ("department_reason", "Reason given by department"),
     ("investigation", "Investigation"),
+    ("investigation_sla", "Investigation SLA"),
 )
 
 SUMMARY_COLUMNS = (
     ("ticket_type", "Department"),
     ("raised", "Complaints raised"),
     ("prior_raised", "Same period prior"),
+    ("weekly_avg_3m", "Weekly avg (last 3 months)"),
     ("resolved", "Resolved"),
     ("open", "Open"),
     ("investigation_submitted", "Investigation submitted"),
@@ -93,6 +95,13 @@ def _prior_bounds(from_date, to_date):
     prior_end = start  # exclusive end = current start
     prior_start = start - timedelta(days=length_days)
     return prior_start, prior_end
+
+
+def _recent_bounds(to_date):
+    """The 3 months ending on to_date: inclusive (from, to) dates and the window length in weeks."""
+    end = add_days(getdate(to_date), 1)
+    start = add_months(end, -3)
+    return start, getdate(to_date), (end - start).days / 7
 
 
 def _complaint_scope_sql(alias: str = "t") -> tuple[str, dict]:
@@ -162,6 +171,7 @@ def _select_fields(alias: str = "t") -> str:
         "custom_solution",
         "custom_category",
         "investigation_status",
+        "internal_sla_status",
     ):
         if _has_field(field):
             fields.append(f"{alias}.{field}")
@@ -182,32 +192,29 @@ def _fetch_tickets(filters: dict) -> list[dict]:
     )
 
 
-def _fetch_prior_counts(filters: dict) -> dict[str, int]:
-    prior_start, prior_end = _prior_bounds(filters.get("from_date"), filters.get("to_date"))
-    if not prior_start:
-        return {}
-
-    prior_filters = {
-        k: v
-        for k, v in filters.items()
-        if k not in ("from_date", "to_date")
-    }
-    prior_filters["from_date"] = prior_start.isoformat()
-    # to_date inclusive: prior_end is exclusive (= current from_date), so to_date = prior_end - 1 day
-    prior_filters["to_date"] = add_days(prior_end, -1).isoformat()
-
-    where_sql, values = _ticket_filters_sql(prior_filters)
+def _counts_by_type(filters: dict, from_date, to_date) -> dict[str, int]:
+    """Complaint count per ticket type, same filters, over another inclusive date range."""
+    where_sql, values = _ticket_filters_sql({**filters, "from_date": from_date, "to_date": to_date})
+    # blank ticket_type counts as Unspecified, like the detail rows (_row_from_ticket)
     rows = frappe.db.sql(
         f"""
-        SELECT IFNULL(t.ticket_type, 'Unspecified') AS ticket_type, COUNT(*) AS cnt
+        SELECT COALESCE(NULLIF(t.ticket_type, ''), 'Unspecified') AS ticket_type, COUNT(*) AS cnt
         FROM `tabHD Ticket` t
         WHERE {where_sql}
-        GROUP BY IFNULL(t.ticket_type, 'Unspecified')
+        GROUP BY COALESCE(NULLIF(t.ticket_type, ''), 'Unspecified')
         """,
         values,
         as_dict=True,
     )
     return {r.ticket_type: int(r.cnt) for r in rows}
+
+
+def _fetch_prior_counts(filters: dict) -> dict[str, int]:
+    prior_start, prior_end = _prior_bounds(filters.get("from_date"), filters.get("to_date"))
+    if not prior_start:
+        return {}
+    # to_date inclusive: prior_end is exclusive (= current from_date), so to_date = prior_end - 1 day
+    return _counts_by_type(filters, prior_start, add_days(prior_end, -1))
 
 
 def _latest_comments(ticket_names: list[str]) -> dict[str, str]:
@@ -268,6 +275,7 @@ def _row_from_ticket(ticket: dict, comments: dict[str, str], resolved: set[str])
         "resolution_by_cs": _strip_html(ticket.get("custom_solution")),
         "department_reason": reason,
         "investigation": investigation,
+        "investigation_sla": ticket.get("internal_sla_status") or "",
         "ticket_type": ticket.get("ticket_type") or "Unspecified",
         "agent_group": ticket.get("agent_group") or "",
         "status": ticket.get("status") or "",
@@ -289,6 +297,8 @@ def build_complaints_report(filters: dict | None = None) -> dict:
     tickets = _fetch_tickets(filters)
     comments = _latest_comments([str(t.name) for t in tickets])
     prior_counts = _fetch_prior_counts(filters)
+    recent_from, recent_to, recent_weeks = _recent_bounds(filters["to_date"])
+    recent_counts = _counts_by_type(filters, recent_from, recent_to)
 
     rows = [_row_from_ticket(t, comments, resolved) for t in tickets]
     rows_by_type: dict[str, list] = defaultdict(list)
@@ -300,14 +310,16 @@ def build_complaints_report(filters: dict | None = None) -> dict:
         "ticket_type": "Total",
         "raised": 0,
         "prior_raised": 0,
+        "weekly_avg_3m": round(sum(recent_counts.values()) / recent_weeks, 1),
         "resolved": 0,
         "open": 0,
         "investigation_submitted": 0,
         "investigation_pending": 0,
     }
 
-    for ticket_type in sorted(rows_by_type.keys(), key=lambda x: (x == "Unspecified", x)):
-        type_rows = rows_by_type[ticket_type]
+    # Types with only prior or last-3-months tickets get a row too, so the Total row adds up
+    for ticket_type in set(rows_by_type) | set(prior_counts) | set(recent_counts):
+        type_rows = rows_by_type.get(ticket_type, [])
         raised = len(type_rows)
         resolved_n = sum(1 for r in type_rows if r["is_resolved"])
         open_n = raised - resolved_n
@@ -318,6 +330,7 @@ def build_complaints_report(filters: dict | None = None) -> dict:
             "ticket_type": ticket_type,
             "raised": raised,
             "prior_raised": prior,
+            "weekly_avg_3m": round(recent_counts.get(ticket_type, 0) / recent_weeks, 1),
             "resolved": resolved_n,
             "open": open_n,
             "investigation_submitted": submitted,
@@ -333,22 +346,6 @@ def build_complaints_report(filters: dict | None = None) -> dict:
             "investigation_pending",
         ):
             total[key] += entry[key]
-
-    # Include prior-only types so comparison column is complete
-    for ticket_type, prior in prior_counts.items():
-        if ticket_type not in rows_by_type:
-            by_type.append(
-                {
-                    "ticket_type": ticket_type,
-                    "raised": 0,
-                    "prior_raised": prior,
-                    "resolved": 0,
-                    "open": 0,
-                    "investigation_submitted": 0,
-                    "investigation_pending": 0,
-                }
-            )
-            total["prior_raised"] += prior
     by_type.sort(key=lambda r: (-r["raised"], r["ticket_type"]))
 
     donut = [

@@ -8,19 +8,20 @@
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <Dropdown :options="periodOptions">
+        <Dropdown v-if="!showDatePicker" :options="periodOptions">
           <Button>
             <template #prefix><LucideCalendar class="w-4 h-4" /></template>
             {{ periodLabel }}
             <template #suffix><LucideChevronDown class="w-4 h-4" /></template>
           </Button>
         </Dropdown>
+        <!-- Replaces the Dropdown (as on the Dashboard): next to a still-mounted Dropdown, its closing
+             menu takes focus back and the calendar closes on that "click outside" -->
         <DateRangePicker
-          v-if="showDatePicker"
+          v-else
           ref="datePickerRef"
-          class="w-0 overflow-hidden"
           v-model="period"
-          :formatter="formatRangeLabel"
+          class="w-56"
           @update:model-value="onCustomRange"
         />
         <select v-model="ticketType" :class="selectClass" aria-label="Ticket Type">
@@ -192,7 +193,7 @@ import {
   createResource,
   usePageMeta,
 } from "frappe-ui";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideBarChart2 from "~icons/lucide/bar-chart-2";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -292,6 +293,7 @@ const summaryColumns = computed(
       { key: "ticket_type", label: "Department" },
       { key: "raised", label: "Complaints raised" },
       { key: "prior_raised", label: "Same period prior" },
+      { key: "weekly_avg_3m", label: "Weekly avg (last 3 months)" },
       { key: "resolved", label: "Resolved" },
       { key: "open", label: "Open" },
       { key: "investigation_submitted", label: "Investigation submitted" },
@@ -312,6 +314,7 @@ const detailColumns = computed(
       { key: "resolution_by_cs", label: "Resolution by CS" },
       { key: "department_reason", label: "Reason given by department" },
       { key: "investigation", label: "Investigation" },
+      { key: "investigation_sla", label: "Investigation SLA" },
     ]
 );
 
@@ -415,6 +418,11 @@ function detailCellClass(key: string, row: Record<string, any>) {
     if (row[key] === "Resolved") return "font-medium text-green-700";
     if (row[key] === "Open") return "font-medium text-orange-600";
   }
+  if (key === "investigation_sla") {
+    if (row[key] === "Breached") return "font-medium text-red-600";
+    if (row[key] === "At Risk") return "font-medium text-orange-600";
+    if (row[key] === "Met") return "font-medium text-green-700";
+  }
   if (key === "status") {
     return "font-medium text-gray-800";
   }
@@ -430,7 +438,8 @@ function setPreset(label: string, days: number) {
 function openCustomRange() {
   periodLabel.value = "Custom Range";
   showDatePicker.value = true;
-  nextTick(() => datePickerRef.value?.open?.());
+  // after the Dropdown has unmounted, so its menu's focus trap is gone
+  setTimeout(() => datePickerRef.value?.open?.(), 0);
 }
 
 function formatRangeLabel(range: string) {
@@ -440,7 +449,8 @@ function formatRangeLabel(range: string) {
 }
 
 function onCustomRange(value: string) {
-  if (!value) return;
+  // the calendar's Clear button emits ""
+  if (!value) return setPreset("Last 30 Days", 30);
   period.value = value;
   periodLabel.value = formatRangeLabel(value);
   showDatePicker.value = false;
