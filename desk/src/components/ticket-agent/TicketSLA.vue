@@ -54,13 +54,29 @@
           />
         </Tooltip>
       </div>
+      <!-- Assignee (also editable in the sidebar's Details tab) -->
+      <template v-if="assignees?.data">
+        <div class="border-l border-outline-gray-2 h-[13px]" />
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="shrink-0">{{ __("Assigned to") }}</span>
+          <template v-if="assignees.data.length">
+            <MultipleAvatar
+              :avatars="assignees.data.map((a) => a.name)"
+              size="sm"
+              hide-name
+            />
+            <span class="truncate font-medium">{{ assigneeNames }}</span>
+          </template>
+          <span v-else class="text-ink-gray-4">{{ __("Unassigned") }}</span>
+        </div>
+      </template>
     </div>
   </teleport>
 </template>
 
 <script setup lang="ts">
 import { useShortcut } from "@/composables/shortcuts";
-import { TicketSymbol } from "@/types";
+import { AssigneeSymbol, TicketSymbol } from "@/types";
 import {
   copyToClipboard,
   dateFormat,
@@ -69,8 +85,15 @@ import {
 } from "@/utils";
 import { Badge, dayjs, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
+import { useUserStore } from "@/stores/user";
+import MultipleAvatar from "../MultipleAvatar.vue";
 
 const ticket = inject(TicketSymbol);
+const assignees = inject(AssigneeSymbol);
+const { getUser } = useUserStore();
+const assigneeNames = computed(() =>
+  (assignees.value?.data || []).map((a) => getUser(a.name).full_name).join(", ")
+);
 
 const resolutionBy = computed(() => {
   if (ticket.value?.get?.loading) return { label: "", color: "", date: "" };

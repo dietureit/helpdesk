@@ -61,6 +61,19 @@ def get_first_contact_fieldnames(ticket_type: str) -> set[str]:
 
 
 @frappe.whitelist()
+def get_form_field_options():
+    """HD Ticket fields a ticket type's form can expose (what validate_first_contact_fields accepts),
+    for the agent UI's field picker."""
+    frappe.has_permission("HD Ticket Type", throw=True)
+    options = [
+        {"label": _(df.label) or df.fieldname, "value": df.fieldname, "fieldtype": df.fieldtype}
+        for df in frappe.get_meta("HD Ticket").fields
+        if df.fieldtype not in frappe.model.no_value_fields and df.fieldname not in FORM_FIELD_BLOCKLIST
+    ]
+    return sorted(options, key=lambda option: option["label"].lower())
+
+
+@frappe.whitelist()
 def get_ticket_type_forms():
     """{ticket type: {"sub_types": [...], "fields": [...]}} for every type: drives the per-type ticket form."""
     frappe.has_permission("HD Ticket Type", throw=True)

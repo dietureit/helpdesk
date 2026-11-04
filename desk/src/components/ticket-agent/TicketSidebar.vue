@@ -7,6 +7,8 @@
     />
     <div class="flex-1 min-h-0 overflow-y-auto">
       <TicketDetailsTab v-if="currentTab === 'details'" />
+      <!-- Customer Information section of the same field form -->
+      <TicketDetailsTab v-else-if="currentTab === 'customer'" tab="customer" />
       <TicketContactTab v-else />
     </div>
   </Resizer>
@@ -28,6 +30,10 @@ const tabs = [
   {
     label: "Contact",
     value: "contact",
+  },
+  {
+    label: "Customer",
+    value: "customer",
   },
 ];
 </script>
