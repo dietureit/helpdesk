@@ -21,6 +21,7 @@
           <option :value="6">Last 6 months</option>
           <option :value="12">Last 12 months</option>
           <option :value="24">Last 24 months</option>
+          <option :value="0">Custom range</option>
         </select>
         <select
           v-else
@@ -33,9 +34,17 @@
           <option :value="12">Last 12 weeks</option>
           <option :value="26">Last 26 weeks</option>
           <option :value="52">Last 52 weeks</option>
+          <option :value="0">Custom range</option>
         </select>
-        <Button label="PDF" @click="exportReport('PDF')" />
-        <Button label="Excel" @click="exportReport('Excel')" />
+        <DateRangePicker
+          v-if="isCustom"
+          ref="datePickerRef"
+          v-model="range"
+          class="w-56"
+          placeholder="Select dates"
+        />
+        <Button label="PDF" :disabled="waitingForRange" @click="exportReport('PDF')" />
+        <Button label="Excel" :disabled="waitingForRange" @click="exportReport('Excel')" />
         <Button
           v-if="authStore.isManager"
           label="Schedule Report"
@@ -105,8 +114,8 @@
 
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
-import { Button, createResource, usePageMeta } from "frappe-ui";
-import { computed, ref } from "vue";
+import { Button, DateRangePicker, createResource, usePageMeta } from "frappe-ui";
+import { computed, nextTick, ref, watch } from "vue";
 import ScheduleReportDialog from "./ScheduleReportDialog.vue";
 
 interface ReportRow {
@@ -121,10 +130,17 @@ const authStore = useAuthStore();
 const months = ref(12);
 const period = ref<"monthly" | "weekly">("monthly");
 const weeks = ref(12);
+// "from,to" dates, used while the range select is on Custom range (value 0)
+const range = ref("");
+const datePickerRef = ref<{ open?: () => void } | null>(null);
 const showScheduleDialog = ref(false);
 
+const isCustom = computed(() => (period.value === "monthly" ? months.value : weeks.value) === 0);
+const waitingForRange = computed(() => isCustom.value && !range.value);
+
 function reportParams() {
-  return { months: months.value, period: period.value, weeks: weeks.value };
+  const [from_date = "", to_date = ""] = isCustom.value ? range.value.split(",") : [];
+  return { months: months.value, period: period.value, weeks: weeks.value, from_date, to_date };
 }
 
 const report = createResource({
@@ -134,16 +150,27 @@ const report = createResource({
 });
 
 function reload() {
+  if (waitingForRange.value) {
+    // fetch once both dates are picked (the range watcher below)
+    nextTick(() => datePickerRef.value?.open?.());
+    return;
+  }
   report.update({ params: reportParams() });
   report.reload();
 }
 
+// clearing the picker emits "": keep the last report instead of reopening the calendar
+watch(range, (value) => value && reload());
+
 function exportReport(format: "PDF" | "Excel") {
+  const { from_date, to_date } = reportParams();
   const params = new URLSearchParams({
     file_format: format,
     months: String(months.value),
     period: period.value,
     weeks: String(weeks.value),
+    from_date,
+    to_date,
   });
   window.open(
     `/api/method/helpdesk.api.dashboard.download_group_report?${params}`,

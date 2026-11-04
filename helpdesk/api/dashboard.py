@@ -1136,12 +1136,21 @@ def get_group_report_rows(
 @frappe.whitelist()
 @agent_only
 def get_monthly_group_report(
-    months: int = 12, period: str = "monthly", weeks: int = 12
+    months: int = 12,
+    period: str = "monthly",
+    weeks: int = 12,
+    from_date: str = None,
+    to_date: str = None,
 ) -> list[dict[str, any]]:
     """
     Grouped ticket report. period="monthly": last `months` months grouped
     by month. period="weekly": last `weeks` ISO weeks grouped by week.
+    from_date and to_date (both inclusive) replace the "last N" window.
     """
+    if from_date and to_date:
+        to_date = frappe.utils.add_days(frappe.utils.getdate(to_date), 1)
+        return get_group_report_rows(period, frappe.utils.getdate(from_date), to_date)
+
     if period == "weekly":
         weeks = min(int(weeks), 104)
         from_date = frappe.utils.add_days(frappe.utils.nowdate(), -weeks * 7)
@@ -1200,9 +1209,15 @@ def download_group_report(
     months: int = 12,
     period: str = "monthly",
     weeks: int = 12,
+    from_date: str = None,
+    to_date: str = None,
 ):
-    rows = get_monthly_group_report(months=months, period=period, weeks=weeks)
+    rows = get_monthly_group_report(
+        months=months, period=period, weeks=weeks, from_date=from_date, to_date=to_date
+    )
     title = f"Helpdesk Ticket Report ({period})"
+    if from_date and to_date:
+        title += f" {frappe.utils.getdate(from_date)} to {frappe.utils.getdate(to_date)}"
     fname, fcontent = build_group_report_file(rows, file_format, title)
     frappe.local.response.filename = fname
     frappe.local.response.filecontent = fcontent
