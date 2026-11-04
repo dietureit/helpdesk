@@ -20,7 +20,7 @@ EDITABLE_FIELDS = (
     *WEEKDAYS,
     "holiday_list",
     "tiers",
-    "rules",
+    "ticket_types",
     "breach_recipients",
     "send_email",
 )
@@ -55,10 +55,7 @@ def get_options():
 @frappe.whitelist()
 def get_settings():
     check_manager()
-    return {
-        "settings": frappe.get_single("HD Internal SLA Settings").as_dict(),
-        "categories": get_categories(),
-    }
+    return {"settings": frappe.get_single("HD Internal SLA Settings").as_dict()}
 
 
 @frappe.whitelist()

@@ -43,7 +43,7 @@
               <span class="text-p-sm text-ink-gray-6">
                 {{
                   __(
-                    "New tickets get a tier from the rules below; agents can change it on the ticket."
+                    "New tickets get the tier their ticket type is on; agents can change it on the ticket."
                   )
                 }}
               </span>
@@ -55,6 +55,7 @@
             class="w-56"
             type="number"
             :label="__('Warn at (% of the target elapsed)')"
+            :description="__('A new value applies to tickets that get a tier from now on.')"
           />
         </section>
 
@@ -93,10 +94,19 @@
 
         <hr />
         <section class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
-            <h2 class="text-base font-semibold text-ink-gray-8">
-              {{ __("Tiers") }}
-            </h2>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="text-base font-semibold text-ink-gray-8">
+                {{ __("Tiers") }}
+              </h2>
+              <p class="mt-1 text-p-sm text-ink-gray-6">
+                {{
+                  __(
+                    "New tickets of the picked types get that tier. Types not picked on any tier get no internal SLA."
+                  )
+                }}
+              </p>
+            </div>
             <Button :label="__('Add tier')" @click="addTier">
               <template #prefix><LucidePlus class="size-4" /></template>
             </Button>
@@ -114,120 +124,19 @@
               :options="['Minutes', 'Hours', 'Days']"
               :aria-label="__('Unit')"
             />
-            <FormControl v-model="tier.description" :placeholder="__('Description (optional)')" />
+            <MultiSelect
+              v-model="tier.ticket_types"
+              class="w-full"
+              :options="ticketTypeOptions(tier)"
+              :placeholder="__('Ticket types')"
+              :aria-label="__('Ticket types')"
+            />
             <Button
               variant="ghost"
               icon="x"
               :aria-label="__('Remove tier')"
               @click="form.tiers.splice(index, 1)"
             />
-          </div>
-        </section>
-
-        <hr />
-        <section class="flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <h2 class="text-base font-semibold text-ink-gray-8">
-                {{ __("Rules") }}
-              </h2>
-              <p class="mt-1 text-p-sm text-ink-gray-6">
-                {{
-                  __(
-                    "Checked top to bottom; the first matching rule sets a new ticket's tier. Empty columns match anything."
-                  )
-                }}
-              </p>
-            </div>
-            <Button :label="__('Add rule')" @click="addRule">
-              <template #prefix><LucidePlus class="size-4" /></template>
-            </Button>
-          </div>
-          <div
-            class="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] gap-2 text-xs text-ink-gray-6"
-          >
-            <span>{{ __("Category") }}</span>
-            <span>{{ __("Sub category") }}</span>
-            <span>{{ __("Ticket type") }}</span>
-            <span>{{ __("Sub type") }}</span>
-            <span>{{ __("Team") }}</span>
-            <span>{{ __("Tier") }}</span>
-            <span class="w-24" />
-          </div>
-          <div
-            v-for="(rule, index) in form.rules"
-            :key="index"
-            class="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] items-center gap-2"
-          >
-            <FormControl
-              type="select"
-              :options="categoryOptions"
-              :aria-label="__('Category')"
-              :model-value="rule.category || ANY"
-              @update:model-value="
-                (value: string) => {
-                  rule.category = fromOption(value);
-                  rule.sub_category = '';
-                }
-              "
-            />
-            <FormControl
-              type="select"
-              :options="subCategoryOptions(rule.category)"
-              :aria-label="__('Sub category')"
-              :model-value="rule.sub_category || ANY"
-              @update:model-value="(value: string) => (rule.sub_category = fromOption(value))"
-            />
-            <Link
-              doctype="HD Ticket Type"
-              :placeholder="__('Any')"
-              :model-value="rule.ticket_type"
-              @update:model-value="
-                (value: string) => {
-                  if (value !== rule.ticket_type) rule.sub_type = ''; // a sub type belongs to one type
-                  rule.ticket_type = value;
-                }
-              "
-            />
-            <FormControl
-              type="select"
-              :options="subTypeOptions(rule.ticket_type)"
-              :aria-label="__('Sub type')"
-              :model-value="rule.sub_type || ANY"
-              @update:model-value="(value: string) => (rule.sub_type = fromOption(value))"
-            />
-            <Link v-model="rule.team" doctype="HD Team" :placeholder="__('Any')" />
-            <FormControl
-              type="select"
-              :options="tierOptions"
-              :aria-label="__('Tier')"
-              :model-value="rule.tier || ANY"
-              @update:model-value="(value: string) => (rule.tier = fromOption(value))"
-            />
-            <div class="flex w-24 items-center">
-              <Button
-                variant="ghost"
-                :aria-label="__('Move up')"
-                :disabled="index === 0"
-                @click="moveRule(index, -1)"
-              >
-                <LucideArrowUp class="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                :aria-label="__('Move down')"
-                :disabled="index === form.rules.length - 1"
-                @click="moveRule(index, 1)"
-              >
-                <LucideArrowDown class="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                icon="x"
-                :aria-label="__('Remove rule')"
-                @click="form.rules.splice(index, 1)"
-              />
-            </div>
           </div>
         </section>
 
@@ -240,14 +149,14 @@
             <p class="mt-1 text-p-sm text-ink-gray-6">
               {{
                 __(
-                  "Assigned agents are alerted when a ticket reaches the warning point and when it breaches. Changes here apply to tickets that get a tier from now on."
+                  "When a ticket reaches the warning point and when it breaches, its assignees and the people below are alerted."
                 )
               }}
             </p>
           </div>
           <div class="flex flex-col gap-1.5">
             <span class="text-xs text-ink-gray-5">
-              {{ __("Also alert on breach (e.g. the CX Manager)") }}
+              {{ __("Also alert (e.g. the CX Manager)") }}
             </span>
             <div class="flex flex-wrap items-center gap-1.5">
               <span
@@ -297,12 +206,11 @@ import {
   createResource,
   FormControl,
   LoadingIndicator,
+  MultiSelect,
   Switch,
   toast,
 } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
-import LucideArrowDown from "~icons/lucide/arrow-down";
-import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucidePlus from "~icons/lucide/plus";
 import LucideX from "~icons/lucide/x";
 import { disableSettingModalOutsideClick } from "../settingsModal";
@@ -319,27 +227,26 @@ const WEEKDAYS = [
   "sunday",
 ];
 
-// frappe-ui's select drops options with an empty value, so "Any" / "No internal SLA" use this one
-const ANY = "__any__";
-const fromOption = (value: string) => (value === ANY ? "" : value);
-
 const form = ref<Record<string, any> | null>(null);
 const savedForm = ref("");
-const categories = ref<Record<string, string[]>>({});
 
-// ticket type -> { sub_types } (the same forms the ticket dialog and Details tab use)
-const typeForms = ref<Record<string, { sub_types?: string[] }>>({});
+// every ticket type name (keys of the per-type forms the ticket dialog uses)
+const ticketTypes = ref<string[]>([]);
 createResource({
   url: "helpdesk.helpdesk.doctype.hd_ticket_type.hd_ticket_type.get_ticket_type_forms",
   auto: true,
-  onSuccess: (data) => (typeForms.value = data || {}),
+  onSuccess: (data) => (ticketTypes.value = Object.keys(data || {})),
 });
 
-function subTypeOptions(ticketType: string): Option[] {
-  const subTypes = ticketType
-    ? typeForms.value[ticketType]?.sub_types || []
-    : [...new Set(Object.values(typeForms.value).flatMap((form) => form.sub_types || []))];
-  return [{ label: __("Any"), value: ANY }, ...subTypes.map((sub) => ({ label: sub, value: sub }))];
+// a ticket type sits on one tier, so types picked on the other tiers are left out
+function ticketTypeOptions(tier: Record<string, any>): Option[] {
+  const taken = form.value!.tiers
+    .filter((other) => other !== tier)
+    .flatMap((other) => other.ticket_types);
+  return [...new Set([...tier.ticket_types, ...ticketTypes.value])]
+    .filter((type) => !taken.includes(type))
+    .sort()
+    .map((type) => ({ label: type, value: type }));
 }
 
 function toForm(doc: Record<string, any>) {
@@ -352,24 +259,17 @@ function toForm(doc: Record<string, any>) {
       tier: row.tier,
       target: row.target,
       unit: row.unit,
-      description: row.description || "",
-    })),
-    rules: (doc.rules || []).map((row) => ({
-      category: row.category || "",
-      sub_category: row.sub_category || "",
-      ticket_type: row.ticket_type || "",
-      sub_type: row.sub_type || "",
-      team: row.team || "",
-      tier: row.tier || "",
+      ticket_types: (doc.ticket_types || [])
+        .filter((link) => link.tier === row.tier)
+        .map((link) => link.ticket_type),
     })),
     breach_recipients: (doc.breach_recipients || []).map((row) => row.user),
     send_email: Boolean(doc.send_email),
   };
 }
 
-function load(data: { settings: Record<string, any>; categories: Record<string, string[]> }) {
+function load(data: { settings: Record<string, any> }) {
   form.value = toForm(data.settings);
-  categories.value = data.categories || {};
   savedForm.value = JSON.stringify(form.value);
 }
 
@@ -388,6 +288,10 @@ const saveResource = createResource({
       settings: {
         ...value,
         ...Object.fromEntries(checks.map((field) => [field, value[field] ? 1 : 0])),
+        tiers: value.tiers.map(({ ticket_types, ...tier }) => tier),
+        ticket_types: value.tiers.flatMap((tier) =>
+          tier.ticket_types.map((ticket_type: string) => ({ tier: tier.tier, ticket_type }))
+        ),
         breach_recipients: value.breach_recipients.map((user: string) => ({ user })),
       },
     };
@@ -418,46 +322,8 @@ onUnmounted(() => {
   disableSettingModalOutsideClick.value = false;
 });
 
-const categoryOptions = computed(() => [
-  { label: __("Any"), value: ANY },
-  ...Object.keys(categories.value).map((category) => ({ label: category, value: category })),
-]);
-
-function subCategoryOptions(category: string) {
-  const subCategories = category
-    ? categories.value[category] || []
-    : Object.values(categories.value).flat();
-  return [
-    { label: __("Any"), value: ANY },
-    ...subCategories.map((sub) => ({ label: sub, value: sub })),
-  ];
-}
-
-const tierOptions = computed(() => [
-  { label: __("No internal SLA"), value: ANY },
-  ...form
-    .value!.tiers.filter((tier) => tier.tier)
-    .map((tier) => ({ label: tier.tier, value: tier.tier })),
-]);
-
 function addTier() {
-  form.value!.tiers.push({ tier: "", target: 1, unit: "Days", description: "" });
-}
-
-function addRule() {
-  form.value!.rules.push({
-    category: "",
-    sub_category: "",
-    ticket_type: "",
-    sub_type: "",
-    team: "",
-    tier: "",
-  });
-}
-
-function moveRule(index: number, step: number) {
-  const rules = form.value!.rules;
-  [rules[index], rules[index + step]] = [rules[index + step], rules[index]];
+  form.value!.tiers.push({ tier: "", target: 1, unit: "Days", ticket_types: [] });
 }
 
 function addRecipient(user: string) {

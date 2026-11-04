@@ -20,8 +20,7 @@
   "holiday_list",
   "tiers_section",
   "tiers",
-  "rules_section",
-  "rules",
+  "ticket_types",
   "alerts_section",
   "breach_recipients",
   "send_email"
@@ -114,28 +113,23 @@
    "options": "HD Internal SLA Tier"
   },
   {
-   "description": "Checked top to bottom; the first matching rule sets a new ticket's tier. Empty columns match anything.",
-   "fieldname": "rules_section",
-   "fieldtype": "Section Break",
-   "label": "Rules"
-  },
-  {
-   "fieldname": "rules",
+   "description": "New tickets of these types get the tier; types on no tier get no internal SLA.",
+   "fieldname": "ticket_types",
    "fieldtype": "Table",
-   "label": "Rules",
-   "options": "HD Internal SLA Rule"
+   "label": "Tier Ticket Types",
+   "options": "HD Internal SLA Ticket Type"
   },
   {
-   "description": "Assigned agents are alerted when a ticket is at risk and when it breaches.",
+   "description": "A ticket's assignees and the people below are alerted when it is at risk and when it breaches.",
    "fieldname": "alerts_section",
    "fieldtype": "Section Break",
    "label": "Alerts"
   },
   {
-   "description": "Also alerted when a ticket breaches, e.g. the CX Manager.",
+   "description": "Alerted with the assignees at the warning point and on breach, e.g. the CX Manager.",
    "fieldname": "breach_recipients",
    "fieldtype": "Table MultiSelect",
-   "label": "Breach Recipients",
+   "label": "Also Alert",
    "options": "HD Team Member"
   },
   {
@@ -147,7 +141,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 00:00:00.000000",
+ "modified": "2026-11-05 00:40:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Internal SLA Settings",

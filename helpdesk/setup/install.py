@@ -58,21 +58,12 @@ def add_default_categories_and_articles():
     ).insert()
 
 
-# BRD v12 §4. Tier 0 is picked by hand for critical food-safety cases (allergen, contamination, illness).
+# BRD v12 §4. Which ticket types go on which tier is picked in the Internal SLA settings.
 INTERNAL_SLA_TIERS = [
-    ("Tier 0 - Critical", 15, "Minutes", "Critical health & safety"),
-    ("Tier 1 - Urgent", 1, "Days", "Delivery, food safety & hygiene, refunds"),
-    ("Tier 2 - Standard", 2, "Days", "Customer service, kitchen, pastry, packing"),
-    ("Tier 3 - Systemic", 4, "Days", "Tech / system, ingredients"),
-]
-# First match wins; a rule without a tier means no internal SLA.
-INTERNAL_SLA_RULES = [
-    {"category": "Enquiry"},
-    {"category": "Assistance"},
-    {"ticket_type": "Refund", "tier": "Tier 1 - Urgent"},
-    *({"team": team, "tier": "Tier 1 - Urgent"} for team in ("Delivery Issues", "Hygine", "Billing")),
-    *({"team": team, "tier": "Tier 2 - Standard"} for team in ("Food", "Packaging Issues", "Quality Issues")),
-    {"team": "Technical Issues", "tier": "Tier 3 - Systemic"},
+    ("Tier 0 - Critical", 15, "Minutes"),
+    ("Tier 1 - Urgent", 1, "Days"),
+    ("Tier 2 - Standard", 2, "Days"),
+    ("Tier 3 - Systemic", 4, "Days"),
 ]
 
 
@@ -80,14 +71,8 @@ def add_internal_sla_defaults():
     settings = frappe.get_single("HD Internal SLA Settings")
     if settings.tiers:
         return
-    for tier, target, unit, description in INTERNAL_SLA_TIERS:
-        settings.append("tiers", {"tier": tier, "target": target, "unit": unit, "description": description})
-    for rule in INTERNAL_SLA_RULES:
-        if rule.get("team") and not frappe.db.exists("HD Team", rule["team"]):
-            continue
-        if rule.get("ticket_type") and not frappe.db.exists("HD Ticket Type", rule["ticket_type"]):
-            continue
-        settings.append("rules", rule)
+    for tier, target, unit in INTERNAL_SLA_TIERS:
+        settings.append("tiers", {"tier": tier, "target": target, "unit": unit})
     settings.save(ignore_permissions=True)
 
 
