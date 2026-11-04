@@ -295,7 +295,6 @@ const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[] }[] = [
       "custom_select_source",
       "custom_select_channel",
       "custom_select_type",
-      "custom_ticket_number",
     ],
   },
   {
@@ -332,6 +331,7 @@ const CORE_SKIP = new Set([
 
 // Template fields left out: the classification ones belong to the ticket type's form (First Contact),
 // and the tracking selects store their first option ("Misleading Message", "CLOSED") on every ticket.
+// Ticket Number is hidden too (removed from the sidebar 2026-11-04).
 const LEGACY_SKIP = new Set([
   "custom_proof",
   "custom_complaints_description",
@@ -344,6 +344,7 @@ const LEGACY_SKIP = new Set([
   "custom_assigned_agent",
   "custom_assigned_manager",
   "custom_complaint_status",
+  "custom_ticket_number",
 ]);
 
 const customFields = computed(() => {
