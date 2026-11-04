@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col">
-    <div class="px-5 pb-4 flex flex-col">
+    <div v-if="tab === 'details'" class="px-5 pb-4 flex flex-col">
       <!-- User avatar with buttons -->
       <TicketContact />
       <!-- Core Fields -->
@@ -110,9 +110,9 @@
     </div>
 
     <!-- Additional / complaint fields (grouped like Dieture Update Complaint) -->
-    <div class="border-t flex flex-col pb-4">
+    <div class="flex flex-col pb-4" :class="{ 'border-t': tab === 'details' }">
       <div
-        v-for="(section, index) in customFieldSections"
+        v-for="(section, index) in tabSections"
         :key="section.label"
         :class="index > 0 ? 'border-t border-gray-100 mt-1' : ''"
       >
@@ -153,6 +153,9 @@ import TicketField from "../TicketField.vue";
 import AssignTo from "./AssignTo.vue";
 import TicketContact from "./TicketContact.vue";
 
+const props = withDefaults(defineProps<{ tab?: string }>(), {
+  tab: "details",
+});
 const ticket = inject(TicketSymbol);
 const assignees = inject(AssigneeSymbol);
 const customizations = inject(CustomizationSymbol);
@@ -288,7 +291,7 @@ const coreFields = computed(() => {
 });
 
 /** Dieture complaint form order — section labels shown above matching template fields. */
-const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[] }[] = [
+const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[]; tab?: string }[] = [
   {
     label: __("Complaints Overview"),
     fieldnames: [
@@ -299,6 +302,7 @@ const COMPLAINT_FIELD_SECTIONS: { label: string; fieldnames: string[] }[] = [
   },
   {
     label: __("Customer Information"),
+    tab: "customer", // the sidebar's Customer tab, not Details
     fieldnames: [
       "custom_customer_type",
       "custom_customer_phone",
@@ -394,7 +398,7 @@ const customFieldSections = computed(() => {
   const fields = customFields.value || [];
   const byName = new Map(fields.map((f) => [f.fieldname, f]));
   const used = new Set<string>();
-  const sections: { label: string; fields: typeof fields }[] = [];
+  const sections: { label: string; fields: typeof fields; tab?: string }[] = [];
   if (firstContactFields.value.length) {
     sections.push({
       label: __("First Contact (CS)"),
@@ -408,7 +412,7 @@ const customFieldSections = computed(() => {
       .filter(Boolean);
     if (!sectionFields.length) continue;
     sectionFields.forEach((f) => used.add(f.fieldname));
-    sections.push({ label: section.label, fields: sectionFields });
+    sections.push({ label: section.label, fields: sectionFields, tab: section.tab });
   }
 
   const other = fields.filter((f) => !used.has(f.fieldname));
@@ -417,6 +421,10 @@ const customFieldSections = computed(() => {
   }
   return sections;
 });
+
+const tabSections = computed(() =>
+  customFieldSections.value.filter((s) => (s.tab || "details") === props.tab)
+);
 
 function getFieldInFormat(fieldTemplate, fieldMeta) {
   return {
