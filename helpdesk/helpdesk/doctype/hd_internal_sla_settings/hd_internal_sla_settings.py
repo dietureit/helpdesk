@@ -21,14 +21,6 @@ TICKET_FIELDS = (
 )
 COMPUTED_FIELDS = tuple(field for field in TICKET_FIELDS if field not in EDITABLE_FIELDS)
 ALERT_STATUSES = ("At Risk", "Breached")
-# Rule column -> the HD Ticket field it is compared with (category fields come from crm).
-RULE_FIELDS = {
-    "category": "custom_category",
-    "sub_category": "custom_sub_category",
-    "ticket_type": "ticket_type",
-    "sub_type": "sub_type",
-    "team": "agent_group",
-}
 
 
 class HDInternalSLASettings(Document):
@@ -40,9 +32,17 @@ class HDInternalSLASettings(Document):
         names = [tier.tier for tier in self.tiers]
         if len(set(names)) != len(names):
             frappe.throw(_("Tier names must be unique"))
-        for rule in self.rules:
-            if rule.tier and rule.tier not in names:
-                frappe.throw(_("Rule {0} uses unknown tier {1}").format(rule.idx, rule.tier))
+        tier_of = {}
+        for row in self.ticket_types:
+            row.tier = (row.tier or "").strip()
+            if row.tier not in names:
+                frappe.throw(_("Ticket type {0} uses unknown tier {1}").format(row.ticket_type, row.tier))
+            if tier_of.setdefault(row.ticket_type, row.tier) != row.tier:
+                frappe.throw(
+                    _("Ticket type {0} is on both {1} and {2}").format(
+                        row.ticket_type, tier_of[row.ticket_type], row.tier
+                    )
+                )
         if not 0 < flt(self.warning_percent) < 100:
             frappe.throw(_("Warn at % elapsed must be between 0 and 100"))
 
@@ -71,11 +71,10 @@ def due_after(start, target, unit, working_weekdays, holidays):
 
 
 def match_tier(values, settings):
-    """Tier of the first rule whose filled-in columns all equal the ticket's values; None = no internal SLA."""
-    for rule in settings.rules:
-        if all(not rule.get(col) or rule.get(col) == values.get(field) for col, field in RULE_FIELDS.items()):
-            return rule.tier or None
-    return None
+    """Tier the ticket's type is on; None = no internal SLA."""
+    # `or []`: a settings doc cached before migrate added the table
+    tiers = {row.ticket_type: row.tier for row in settings.get("ticket_types") or []}
+    return tiers.get(values.get("ticket_type"))
 
 
 def get_status(ticket, now=None):
@@ -122,10 +121,10 @@ def apply_internal_sla(doc):
             doc.internal_sla_tier = match_tier(doc, settings)
         elif (
             old
-            and any(old.get(field) != doc.get(field) for field in RULE_FIELDS.values())
+            and old.get("ticket_type") != doc.get("ticket_type")
             and (doc.internal_sla_tier or None) == match_tier(old, settings)
         ):
-            # Re-routing moves an auto-picked tier along; a tier (or "no SLA") an agent picked by hand stays.
+            # A new ticket type moves an auto-picked tier along; a tier (or "no SLA") an agent picked by hand stays.
             doc.internal_sla_tier = match_tier(doc, settings)
 
     if doc.has_value_changed("internal_sla_tier"):
@@ -196,9 +195,8 @@ def notify(ticket, status, settings):
     # helpdesk.utils.is_agent(user) is always True while the scheduler runs as Administrator
     if not users and frappe.db.exists("HD Agent", {"name": ticket.owner, "is_active": 1}):
         users.add(ticket.owner)
-    if status == "Breached" or not users:
-        # BRD §6: the CX Manager acts on breaches; with nobody assigned, they get the warning too.
-        users.update(row.user for row in settings.breach_recipients if row.user)
+    # The alert people (e.g. the CX Manager) get the warning as well as the breach, beside the assignees.
+    users.update(row.user for row in settings.breach_recipients if row.user)
     # a deleted or disabled assignee must not break the alert for everyone else
     users = (
         frappe.get_all("User", filters={"name": ["in", list(users)], "enabled": 1}, fields=["name", "email"])

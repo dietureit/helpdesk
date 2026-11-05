@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class HDInternalSLARule(Document):
+class HDInternalSLATicketType(Document):
     pass

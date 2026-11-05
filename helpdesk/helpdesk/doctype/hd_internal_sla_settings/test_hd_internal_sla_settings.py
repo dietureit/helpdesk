@@ -22,11 +22,10 @@ def make_settings():
                 {"tier": "Fast", "target": 15, "unit": "Minutes"},
                 {"tier": "Slow", "target": 2, "unit": "Days"},
             ],
-            "rules": [
-                {"category": "Enquiry"},
-                {"ticket_type": "Quality", "sub_type": "Illness", "tier": "Fast"},
-                {"team": "Delivery Issues", "tier": "Fast"},
-                {"ticket_type": "Technical", "tier": "Slow"},
+            "ticket_types": [
+                {"tier": "Fast", "ticket_type": "Quality"},
+                {"tier": "Slow", "ticket_type": "Technical"},
+                {"tier": "Slow", "ticket_type": "Refund"},
             ],
         }
     )
@@ -61,13 +60,21 @@ class TestHDInternalSLASettings(FrappeTestCase):
 
     def test_match_tier(self):
         match = lambda **values: sla.match_tier(frappe._dict(values), self.settings)  # noqa: E731
-        self.assertIsNone(match(custom_category="Enquiry", agent_group="Delivery Issues"))
-        self.assertEqual(match(custom_category="Complaint", agent_group="Delivery Issues"), "Fast")
-        self.assertEqual(match(ticket_type="Technical", agent_group="Other Issues"), "Slow")
-        self.assertEqual(match(ticket_type="Quality", sub_type="Illness"), "Fast")
-        self.assertIsNone(match(ticket_type="Quality", sub_type="Spoilage"))
-        self.assertIsNone(match(ticket_type="Problem", sub_type="Illness"))
+        self.assertEqual(match(ticket_type="Quality"), "Fast")
+        self.assertEqual(match(ticket_type="Refund"), "Slow")
+        # only the type counts: team and category don't route
+        self.assertEqual(match(ticket_type="Technical", agent_group="Delivery Issues", custom_category="Enquiry"), "Slow")
+        self.assertIsNone(match(ticket_type="Problem"))  # a type on no tier gets no internal SLA
         self.assertIsNone(match())
+
+    def test_tier_ticket_types_are_validated(self):
+        self.settings.ticket_types[0].tier = " Fast "
+        self.settings.validate()
+        self.assertEqual(self.settings.ticket_types[0].tier, "Fast")
+        self.settings.append("ticket_types", {"tier": "Fast", "ticket_type": "Refund"})
+        self.assertRaisesRegex(frappe.ValidationError, "on both Slow and Fast", self.settings.validate)
+        self.settings.ticket_types[-1].update({"tier": "Gone", "ticket_type": "Bug"})
+        self.assertRaisesRegex(frappe.ValidationError, "unknown tier Gone", self.settings.validate)
 
     def test_get_status(self):
         due, warning = THU + timedelta(minutes=15), THU + timedelta(minutes=12)
@@ -85,7 +92,7 @@ class TestHDInternalSLASettings(FrappeTestCase):
 
     def test_new_ticket(self):
         # split tickets arrive with the parent's values
-        doc = self.ticket(agent_group="Delivery Issues", internal_sla_tier="Slow", internal_sla_status="Met")
+        doc = self.ticket(ticket_type="Quality", internal_sla_tier="Slow", internal_sla_status="Met")
         sla.apply_internal_sla(doc)
         self.assertEqual(doc.investigation_status, "Open")
         self.assertEqual(doc.internal_sla_tier, "Fast")
@@ -93,17 +100,22 @@ class TestHDInternalSLASettings(FrappeTestCase):
         self.assertEqual(doc.internal_sla_warning_by, THU + timedelta(minutes=12))
         self.assertEqual(doc.internal_sla_status, "On Track")
 
-    def test_rerouting_keeps_a_hand_picked_tier(self):
+        # a type on no tier: the investigation is tracked, with no internal SLA
+        doc = self.ticket(ticket_type="Problem")
+        sla.apply_internal_sla(doc)
+        self.assertEqual((doc.investigation_status, doc.internal_sla_tier, doc.internal_sla_due_by), ("Open", None, None))
+
+    def test_retyping_keeps_a_hand_picked_tier(self):
         tracked = {"investigation_status": "Open", "internal_sla_due_by": THU + timedelta(days=2)}
-        old = {**tracked, "agent_group": "Delivery Issues", "internal_sla_tier": "Slow"}
-        doc = self.ticket(old, **{**old, "agent_group": "Technical Issues"})
+        old = {**tracked, "ticket_type": "Quality", "internal_sla_tier": "Slow"}
+        doc = self.ticket(old, **{**old, "ticket_type": "Problem"})
         sla.apply_internal_sla(doc)
         self.assertEqual(doc.internal_sla_tier, "Slow")
         self.assertEqual(doc.internal_sla_due_by, THU + timedelta(days=2))
 
-        # an auto-picked tier follows the new route
-        old = {**tracked, "agent_group": "Delivery Issues", "internal_sla_tier": "Fast"}
-        doc = self.ticket(old, **{**old, "agent_group": "Technical Issues", "ticket_type": "Technical"})
+        # an auto-picked tier follows the new type
+        old = {**tracked, "ticket_type": "Quality", "internal_sla_tier": "Fast"}
+        doc = self.ticket(old, **{**old, "ticket_type": "Technical"})
         sla.apply_internal_sla(doc)
         self.assertEqual(doc.internal_sla_tier, "Slow")
         self.assertEqual(doc.internal_sla_due_by, THU + timedelta(days=2))
@@ -127,7 +139,7 @@ class TestHDInternalSLASettings(FrappeTestCase):
         self.assertEqual((doc.investigation_status, doc.internal_sla_tier), ("Open", "Fast"))
 
     def test_old_tickets_are_not_tracked(self):
-        doc = self.ticket({"agent_group": "Other Issues"}, agent_group="Delivery Issues")
+        doc = self.ticket({"ticket_type": "Problem"}, ticket_type="Quality")
         sla.apply_internal_sla(doc)
         self.assertIsNone(doc.internal_sla_tier)
         self.assertIsNone(doc.internal_sla_due_by)
@@ -146,9 +158,9 @@ class TestHDInternalSLASettings(FrappeTestCase):
         sla.apply_internal_sla(doc)
         self.assertEqual((doc.internal_sla_status, doc.internal_sla_due_by), ("At Risk", due))
 
-    def test_hand_picked_no_sla_survives_rerouting(self):
-        old = {"investigation_status": "Open", "agent_group": "Delivery Issues", "internal_sla_tier": ""}
-        doc = self.ticket(old, **{**old, "agent_group": "Technical Issues", "ticket_type": "Technical"})
+    def test_hand_picked_no_sla_survives_retyping(self):
+        old = {"investigation_status": "Open", "ticket_type": "Quality", "internal_sla_tier": ""}
+        doc = self.ticket(old, **{**old, "ticket_type": "Technical"})
         sla.apply_internal_sla(doc)
         self.assertFalse(doc.internal_sla_tier)
         self.assertIsNone(doc.internal_sla_due_by)
@@ -171,10 +183,11 @@ class TestHDInternalSLASettings(FrappeTestCase):
         ticket = frappe._dict(
             name=1, subject="s", owner="nobody@x.com", _assign=None, internal_sla_tier="Fast", internal_sla_due_by=THU
         )
-        self.settings.send_email = 0
+        self.settings.send_email = 1
         self.settings.append("breach_recipients", {"user": "cx@x.com"})
-        inserted = []
+        inserted, mailed = [], []
         with (
+            patch.object(sla.frappe, "sendmail", side_effect=lambda recipients, **kwargs: mailed.append(sorted(recipients))),
             patch.object(
                 sla.frappe,
                 "get_doc",
@@ -190,11 +203,17 @@ class TestHDInternalSLASettings(FrappeTestCase):
             patch.object(sla.frappe.db, "exists", return_value=False),
         ):
             sla.notify(ticket, "Met", self.settings)
-            self.assertEqual(inserted, [])
-            sla.notify(ticket, "At Risk", self.settings)  # nobody assigned: the breach recipients get the warning
-            self.assertEqual(inserted, ["cx@x.com"])
+            self.assertEqual((inserted, mailed), ([], []))
+            sla.notify(ticket, "At Risk", self.settings)  # nobody assigned: the alert people still get it
+            self.assertEqual((inserted, mailed), (["cx@x.com"], [["cx@x.com"]]))
             ticket._assign = '["a@x.com"]'
+            # the warning reaches the assignee and the alert people, by notification and by email
             sla.notify(ticket, "At Risk", self.settings)
-            self.assertEqual(inserted[1:], ["a@x.com"])
+            self.assertEqual(sorted(inserted[1:]), ["a@x.com", "cx@x.com"])
+            self.assertEqual(mailed[1:], [["a@x.com", "cx@x.com"]])
             sla.notify(ticket, "Breached", self.settings)
-            self.assertEqual(sorted(inserted[2:]), ["a@x.com", "cx@x.com"])
+            self.assertEqual(sorted(inserted[3:]), ["a@x.com", "cx@x.com"])
+            self.assertEqual(mailed[2:], [["a@x.com", "cx@x.com"]])
+            self.settings.send_email = 0
+            sla.notify(ticket, "At Risk", self.settings)
+            self.assertEqual(len(mailed), 3)  # email switched off: notifications only

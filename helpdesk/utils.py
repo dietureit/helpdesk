@@ -453,11 +453,16 @@ def is_json_valid(json_string):
 
 
 def xlsx_rows(rows):
-    """Rows for frappe.utils.xlsxutils.make_xlsx: openpyxl turns a string starting with "=" into a formula."""
-    return [
-        [" " + cell if isinstance(cell, str) and cell.startswith("=") else cell for cell in row]
-        for row in rows
-    ]
+    """Rows for openpyxl: it turns a string starting with "=" into a formula, and rejects control characters."""
+    from frappe.utils.xlsxutils import ILLEGAL_CHARACTERS_RE
+
+    def clean(cell):
+        if not isinstance(cell, str):
+            return cell
+        cell = ILLEGAL_CHARACTERS_RE.sub("", cell)
+        return " " + cell if cell.startswith("=") else cell
+
+    return [[clean(cell) for cell in row] for row in rows]
 
 
 def is_version_16():
