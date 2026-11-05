@@ -6,14 +6,21 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
+from io import BytesIO
 
 import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.utils import add_days, add_months, getdate, nowdate
-from frappe.utils.xlsxutils import make_xlsx
+from openpyxl import Workbook
+from openpyxl.chart import BarChart, DoughnutChart, Reference
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.marker import DataPoint
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
 
@@ -42,6 +49,50 @@ SUMMARY_COLUMNS = (
     ("investigation_submitted", "Investigation submitted"),
     ("investigation_pending", "Investigation pending"),
 )
+
+
+# Exports mirror the on-screen report (CustomerComplaintsReport.vue): same tiles, colours and charts
+TILES = (
+    ("Raised", "total", "#318AD8", "prior period {prior_total}"),
+    ("Resolved", "resolved", "#48BB78", "status category Resolved"),
+    ("Open", "open", "#ED8936", "not yet resolved"),
+    (
+        "Investigation in",
+        "investigation_submitted",
+        "#48BB78",
+        "department comment present",
+    ),
+    (
+        "Investigation pending",
+        "investigation_pending",
+        "#F56565",
+        "no department comment yet",
+    ),
+)
+DONUT_COLORS = (
+    "#318AD8",
+    "#48BB78",
+    "#ED8936",
+    "#F56565",
+    "#9F7AEA",
+    "#38B2AC",
+    "#D69E2E",
+    "#718096",
+)
+BAR_SERIES = (("Resolved", "#48BB78"), ("Open", "#ED8936"))
+CELL_COLORS = {
+    "Submitted": "#2F855A",
+    "Resolved": "#2F855A",
+    "Met": "#2F855A",
+    "Pending": "#DD6B20",
+    "Open": "#DD6B20",
+    "At Risk": "#DD6B20",
+    "Breached": "#E53E3E",
+}
+COLORED_COLUMNS = {"investigation", "investigation_status", "investigation_sla"}
+NOWRAP_COLUMNS = COLORED_COLUMNS | {"date", "name", "status", "contact_number"}
+# wkhtmltopdf has no emoji font: comment text like "📱 Conversation from CRM" would print boxes
+EMOJI_RE = re.compile("[\U00010000-\U0010FFFF\uFE0F\u200D]")
 
 
 def _parse_filters(filters) -> dict:
@@ -400,96 +451,352 @@ def get_complaints_report(filters=None):
     return build_complaints_report(filters)
 
 
-def _report_to_excel_rows(report: dict) -> list[list]:
-    data = [[_(label) for _k, label in SUMMARY_COLUMNS]]
-    for row in report["by_type"]:
-        data.append([row.get(k) for k, _ in SUMMARY_COLUMNS])
-    data.append([report["totals"].get(k) for k, _ in SUMMARY_COLUMNS])
-    data.append([])
-    data.append([_(label) for _k, label in DETAIL_COLUMNS] + [_("Department"), _("Team")])
-    for ticket_type, rows in report["rows_by_type"].items():
-        for row in rows:
-            data.append(
-                [row.get(k) for k, _ in DETAIL_COLUMNS]
-                + [ticket_type, row.get("agent_group") or ""]
+def _fmt_date(value) -> str:
+    d = getdate(value)
+    return f"{d.day} {d:%b %Y}"  # "3 Nov 2026", as on screen
+
+
+def _filters_line(report: dict) -> str:
+    f, prior = report["filters"], report["prior_period"]
+    parts = [
+        f"{_fmt_date(f['from_date'])} – {_fmt_date(f['to_date'])}",
+        f["ticket_type"] or _("All ticket types"),
+        f["team"] or _("All teams"),
+    ]
+    if prior["from_date"]:
+        parts.append(
+            _("prior period {0} – {1}").format(
+                _fmt_date(prior["from_date"]), _fmt_date(prior["to_date"])
             )
-    return data
+        )
+    return " · ".join(parts)
+
+
+def _esc(value) -> str:
+    """PDF cell text: escaped, emoji dropped, "—" when empty (as on screen)."""
+    text = EMOJI_RE.sub("", "" if value is None else str(value)).strip()
+    return frappe.utils.escape_html(text) if text else "—"
+
+
+def _legend(items) -> str:
+    return (
+        "<div class='legend'>"
+        + "".join(
+            f"<span class='item'><span class='key' style='background:{color}'></span>{label}</span>"
+            for label, color in items
+        )
+        + "</div>"
+    )
+
+
+def _donut_svg(slices: list[dict]) -> str:
+    total = sum(s["value"] for s in slices)
+    r = 60
+    circumference = 2 * math.pi * r
+    rings, legend, offset = [], [], 0.0
+    for i, s in enumerate(slices):
+        color = DONUT_COLORS[i % len(DONUT_COLORS)]
+        length = circumference * s["value"] / total
+        rings.append(
+            # each slice is a dash rotated to its start (wkhtmltopdf mis-draws a negative dash offset)
+            f'<circle cx="90" cy="90" r="{r}" fill="none" stroke="{color}" stroke-width="34" '
+            f'stroke-dasharray="{length:.2f} {circumference:.2f}" '
+            f'transform="rotate({offset / circumference * 360 - 90:.2f} 90 90)"/>'
+        )
+        legend.append(
+            (f"{_esc(s['label'])} ({round(s['value'] / total * 100)}%)", color)
+        )
+        offset += length
+    return (
+        f'<svg width="180" height="180" viewBox="0 0 180 180">{"".join(rings)}</svg>'
+        + _legend(legend)
+    )
+
+
+def _bars_svg(axis: list[dict]) -> str:
+    """Grouped Resolved/Open bars per department, with integer y ticks and value labels."""
+    width, height, left, top, bottom = 460, 190, 28, 14, 22
+    plot_w, plot_h = width - left, height - top - bottom
+    peak = max([1] + [a[key] for a in axis for key, _color in BAR_SERIES])
+    step = math.ceil(peak / 4)
+    y_max = step * math.ceil(peak / step)
+
+    def y(value):
+        return top + plot_h * (1 - value / y_max)
+
+    parts = [
+        f'<line x1="{left}" x2="{width}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="#E5E7EB"/>'
+        f'<text x="{left - 6}" y="{y(v) + 3:.1f}" text-anchor="end">{v}</text>'
+        for v in range(0, y_max + 1, step)
+    ]
+    group = plot_w / len(axis)
+    bar = min(28, group / 3)
+    chars = max(3, int(group / 6))
+    for i, a in enumerate(axis):
+        mid = left + group * (i + 0.5)
+        for j, (key, color) in enumerate(BAR_SERIES):
+            x, top_y = mid - bar + j * bar, y(a[key])
+            parts.append(
+                f'<rect x="{x + 1:.1f}" y="{top_y:.1f}" width="{bar - 2:.1f}" '
+                f'height="{y(0) - top_y:.1f}" fill="{color}"/>'
+            )
+            if a[key]:
+                parts.append(
+                    f'<text x="{x + bar / 2:.1f}" y="{top_y - 3:.1f}" text-anchor="middle">{a[key]}</text>'
+                )
+        label = a["type"] if len(a["type"]) <= chars else a["type"][: chars - 1] + "…"
+        parts.append(
+            f'<text x="{mid:.1f}" y="{height - 6}" text-anchor="middle">{_esc(label)}</text>'
+        )
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-size="10" '
+        f'font-family="Helvetica, Arial, sans-serif" fill="#6B7280">{"".join(parts)}</svg>'
+        + _legend((_esc(_(key)), color) for key, color in BAR_SERIES)
+    )
+
+
+def _html_table(columns, body_rows: list[str]) -> str:
+    head = "".join(f"<th>{_esc(_(label))}</th>" for _key, label in columns)
+    return f"<table class='data'><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
+
+
+def _cards(cells) -> str:
+    """Equal-width bordered cards in a row (a table: wkhtmltopdf's WebKit predates flexbox)."""
+    return (
+        "<div class='cards'><table><tr>"
+        + "".join(f"<td class='card'>{c}</td>" for c in cells)
+        + "</tr></table></div>"
+    )
+
+
+def _detail_cell(key: str, row: dict) -> str:
+    value = row.get(key)
+    if key == "date" and value:
+        value = _fmt_date(value)
+    elif key == "name":
+        value = f"#{value}"
+    style = "white-space:nowrap;" if key in NOWRAP_COLUMNS else ""
+    if key in COLORED_COLUMNS and value in CELL_COLORS:
+        style += f"color:{CELL_COLORS[value]};font-weight:bold;"
+    return f"<td style='{style}'>{_esc(value)}</td>"
+
+
+PDF_CSS = """
+body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #374151; }
+h1 { font-size: 18px; color: #111827; margin: 0 0 2px; }
+h2 { font-size: 13px; color: #111827; margin: 18px 0 6px; }
+h3 { font-size: 11px; color: #111827; margin: 0 0 6px; }
+.muted, h2 span { color: #6B7280; font-weight: normal; }
+.cards { margin: 12px -10px 0; }
+.cards table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 10px 0; }
+.card { padding: 10px 12px; border: 1px solid #E5E7EB; border-radius: 6px; vertical-align: top; }
+.value { font-size: 22px; font-weight: bold; margin: 2px 0; }
+.hint { color: #9CA3AF; }
+.chart { text-align: center; }
+.legend .item { display: inline-block; margin: 4px 8px 0; white-space: nowrap; }
+.key { display: inline-block; width: 8px; height: 8px; border-radius: 4px; margin-right: 4px; }
+.data { width: 100%; border-collapse: collapse; border: 1px solid #E5E7EB; margin-top: 12px; }
+h2 + .data { margin-top: 0; }
+.data th { text-align: left; color: #6B7280; background: #F9FAFB; }
+.data th, .data td { padding: 5px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
+.data tr.total td { font-weight: bold; color: #111827; background: #F9FAFB; }
+thead { display: table-header-group; }
+tr, .section { page-break-inside: avoid; }
+"""
 
 
 def _report_to_html(report: dict) -> str:
-    f = report["filters"]
-    title = _("Customer Complaints Report — {0} to {1}").format(
-        f.get("from_date") or "", f.get("to_date") or ""
+    s, charts = report["summary"], report["charts"]
+    tiles = _cards(
+        f"<div class='muted'>{_esc(_(label))}</div>"
+        f"<div class='value' style='color:{color}'>{s[key]}</div>"
+        f"<div class='hint'>{_esc(_(hint).format(**s))}</div>"
+        for label, key, color, hint in TILES
+    )
+    chart_row = (
+        _cards(
+            [
+                f"<h3>{_esc(_('By department'))}</h3><div class='chart'>{_donut_svg(charts['donut'])}</div>",
+                f"<h3>{_esc(_('Resolved vs open'))}</h3><div class='chart'>{_bars_svg(charts['axis'])}</div>",
+            ]
+        )
+        if charts["donut"]
+        else ""
+    )
+    summary = _html_table(
+        SUMMARY_COLUMNS,
+        [
+            f"<tr class='{'total' if row is report['totals'] else ''}'>"
+            + "".join(
+                f"<td>{_esc(row.get(key))}</td>" for key, _label in SUMMARY_COLUMNS
+            )
+            + "</tr>"
+            for row in [*report["by_type"], report["totals"]]
+        ],
+    )
+    rows_by_type = report["rows_by_type"]
+    sections = (
+        "".join(
+            f"<div class='section'><h2>{_esc(ticket_type)} <span>({len(rows_by_type[ticket_type])})</span></h2>"
+            + _html_table(
+                DETAIL_COLUMNS,
+                [
+                    "<tr>"
+                    + "".join(_detail_cell(key, row) for key, _label in DETAIL_COLUMNS)
+                    + "</tr>"
+                    for row in rows_by_type[ticket_type]
+                ],
+            )
+            + "</div>"
+            for ticket_type in sorted(rows_by_type)
+        )
+        or f"<p>{_esc(_('No tickets in this range.'))}</p>"
+    )
+    # without the doctype WebKit's quirks mode stops tables inheriting the 10px font, and they overflow
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{PDF_CSS}</style></head><body>
+        <h1>{_esc(_("Customer Complaints"))}</h1>
+        <div class="muted">{_esc(_filters_line(report))}</div>
+        {tiles}
+        {chart_row}
+        {summary}
+        {sections}
+    </body></html>"""
+
+
+def _fit_columns(ws, min_row: int = 1):
+    for cells in ws.iter_cols(min_row=min_row):
+        longest = max(
+            (len(str(c.value)) for c in cells if c.value is not None), default=0
+        )
+        ws.column_dimensions[cells[0].column_letter].width = min(
+            max(longest, 6) + 2, 50
+        )
+
+
+def _xlsx_detail(key: str, row: dict):
+    value = row.get(key)
+    if key == "date" and value:
+        return getdate(value)
+    if key == "name" and str(value).isdigit():
+        return int(value)
+    return value
+
+
+def _report_to_xlsx(report: dict) -> bytes:
+    """Summary sheet (tiles, department table, native Excel charts) + a filterable Tickets sheet."""
+    bold, muted, fill = (
+        Font(bold=True),
+        Font(color="6B7280"),
+        PatternFill("solid", fgColor="F3F4F6"),
     )
     s = report["summary"]
-    summary_intro = _(
-        "{0} complaint tickets; {1} resolved, {2} open; "
-        "{3} investigations submitted, {4} pending. "
-        "Prior period: {5} tickets."
-    ).format(
-        s["total"],
-        s["resolved"],
-        s["open"],
-        s["investigation_submitted"],
-        s["investigation_pending"],
-        s["prior_total"],
-    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _("Summary")
+    ws.append([_("Customer Complaints")])
+    ws.append([_filters_line(report)])
+    ws.append([])
+    ws.append([_(label) for label, *_rest in TILES])
+    ws.append([s[key] for _label, key, *_rest in TILES])
+    ws.append([_(hint).format(**s) for *_rest, hint in TILES])
+    ws.append([])
+    ws.append([_(label) for _key, label in SUMMARY_COLUMNS])
+    # read after appending: a blank append() adds no cells, so max_row doesn't count it
+    header = ws.max_row
+    rows = [
+        [row.get(key) for key, _label in SUMMARY_COLUMNS]
+        for row in [*report["by_type"], report["totals"]]
+    ]
+    for row in xlsx_rows(rows):
+        ws.append(row)
 
-    head = "".join(
-        f"<th style='text-align:left;padding:4px 8px'>{frappe.utils.escape_html(_(label))}</th>"
-        for _k, label in SUMMARY_COLUMNS
-    )
-    body_rows = []
-    for row in report["by_type"]:
-        cells = "".join(
-            f"<td style='padding:4px 8px'>{frappe.utils.escape_html(str(row.get(k) if row.get(k) is not None else ''))}</td>"
-            for k, _ in SUMMARY_COLUMNS
-        )
-        body_rows.append(f"<tr>{cells}</tr>")
-    totals = report["totals"]
-    body_rows.append(
-        "<tr>"
-        + "".join(
-            f"<td style='padding:4px 8px'><b>{frappe.utils.escape_html(str(totals.get(k) if totals.get(k) is not None else ''))}</b></td>"
-            for k, _ in SUMMARY_COLUMNS
-        )
-        + "</tr>"
-    )
-    summary_table = f"""
-        <table border="1" style="border-collapse:collapse;font-size:12px;margin-bottom:16px">
-            <thead><tr>{head}</tr></thead>
-            <tbody>{''.join(body_rows)}</tbody>
-        </table>
-    """
+    ws["A1"].font, ws["A2"].font = Font(bold=True, size=14), muted
+    for col, (_label, _key, color, _hint) in enumerate(TILES, 1):
+        ws.cell(4, col).font = muted
+        ws.cell(5, col).font = Font(bold=True, size=16, color=color[1:])
+        ws.cell(6, col).font = Font(size=9, color="9CA3AF")
+    for cell in (*ws[header], *ws[ws.max_row]):
+        cell.font, cell.fill = bold, fill
+    _fit_columns(ws, min_row=4)
 
-    detail_parts = []
-    dhead = "".join(
-        f"<th style='text-align:left;padding:4px 8px'>{frappe.utils.escape_html(_(label))}</th>"
-        for _k, label in DETAIL_COLUMNS
-    )
-    for ticket_type, rows in report["rows_by_type"].items():
-        if not rows:
-            continue
-        body = []
-        for row in rows:
-            cells = "".join(
-                f"<td style='padding:4px 8px;vertical-align:top'>{frappe.utils.escape_html(str(row.get(k) or ''))}</td>"
-                for k, _ in DETAIL_COLUMNS
-            )
-            body.append(f"<tr>{cells}</tr>")
-        detail_parts.append(
-            f"<h4 style='margin:16px 0 8px'>{frappe.utils.escape_html(ticket_type)} "
-            f"({len(rows)})</h4>"
-            f"<table border='1' style='border-collapse:collapse;font-size:11px;width:100%'>"
-            f"<thead><tr>{dhead}</tr></thead><tbody>{''.join(body)}</tbody></table>"
+    # by_type is sorted by raised desc, so the departments the charts show are its first rows
+    n = sum(1 for row in report["by_type"] if row["raised"])
+    if n:
+        col = {key: i for i, (key, _label) in enumerate(SUMMARY_COLUMNS, 1)}
+        categories = Reference(
+            ws, min_col=col["ticket_type"], min_row=header + 1, max_row=header + n
         )
+        anchor = ws.max_row + 3
 
-    return f"""
-        <h2>{frappe.utils.escape_html(title)}</h2>
-        <p style="font-size:13px">{frappe.utils.escape_html(summary_intro)}</p>
-        {summary_table}
-        {''.join(detail_parts) or '<p>No tickets in this range.</p>'}
-    """
+        donut = DoughnutChart(holeSize=55)
+        donut.title, donut.width, donut.height = _("By department"), 11, 8
+        donut.add_data(
+            Reference(ws, min_col=col["raised"], min_row=header, max_row=header + n),
+            titles_from_data=True,
+        )
+        donut.set_categories(categories)
+        for i in range(n):
+            point = DataPoint(idx=i)
+            color = DONUT_COLORS[i % len(DONUT_COLORS)]
+            point.graphicalProperties.solidFill = color[1:]
+            donut.series[0].dPt.append(point)
+        donut.dataLabels = DataLabelList(
+            showPercent=True,
+            showVal=False,
+            showCatName=False,
+            showSerName=False,
+            showLegendKey=False,
+        )
+        ws.add_chart(donut, f"A{anchor}")
+
+        bars = BarChart()
+        bars.title, bars.width, bars.height = _("Resolved vs open"), 16, 8
+        bars.add_data(
+            Reference(
+                ws,
+                min_col=col["resolved"],
+                max_col=col["open"],
+                min_row=header,
+                max_row=header + n,
+            ),
+            titles_from_data=True,
+        )
+        bars.set_categories(categories)
+        for series, (_key, color) in zip(bars.series, BAR_SERIES):
+            series.graphicalProperties.solidFill = color[1:]
+            series.graphicalProperties.line.solidFill = color[1:]
+        # openpyxl 3.1 leaves the axes' delete flag unset, and Excel then hides them
+        bars.x_axis.delete = bars.y_axis.delete = False
+        bars.legend.position = "b"
+        ws.add_chart(bars, f"D{anchor}")
+
+    ts = wb.create_sheet(_("Tickets"))
+    rows = [
+        [_("Department")] + [_(label) for _key, label in DETAIL_COLUMNS] + [_("Team")]
+    ]
+    for ticket_type in sorted(report["rows_by_type"]):
+        rows += [
+            [ticket_type]
+            + [_xlsx_detail(key, row) for key, _label in DETAIL_COLUMNS]
+            + [row.get("agent_group")]
+            for row in report["rows_by_type"][ticket_type]
+        ]
+    for row in xlsx_rows(rows):
+        ts.append(row)
+    for cell in ts[1]:
+        cell.font, cell.fill = bold, fill
+    for row in ts.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            if isinstance(cell.value, date):
+                cell.number_format = "d mmm yyyy"
+    ts.freeze_panes = "A2"
+    ts.auto_filter.ref = ts.dimensions
+    _fit_columns(ts)
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
 
 
 @frappe.whitelist()
@@ -502,12 +809,13 @@ def download_complaints_report(filters=None, file_format: str = "Excel"):
         from frappe.utils.pdf import get_pdf
 
         frappe.local.response.filename = f"customer-complaints-{stamp}.pdf"
-        frappe.local.response.filecontent = get_pdf(_report_to_html(report))
+        # landscape: the 12 ticket columns overflow a portrait page
+        frappe.local.response.filecontent = get_pdf(
+            _report_to_html(report), {"orientation": "Landscape"}
+        )
         frappe.local.response.type = "download"
         return
 
     frappe.local.response.filename = f"customer-complaints-{stamp}.xlsx"
-    frappe.local.response.filecontent = make_xlsx(
-        xlsx_rows(_report_to_excel_rows(report)), "Complaints"
-    ).getvalue()
+    frappe.local.response.filecontent = _report_to_xlsx(report)
     frappe.local.response.type = "download"
