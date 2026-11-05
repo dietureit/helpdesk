@@ -273,7 +273,9 @@ async function handleUserUpdate() {
   // Mark that the next activities reload is user-triggered (comment/email)
   shouldScrollOnUpdate.value = true;
   try {
-    await activities.reload?.();
+    // activities is an injected ComputedRef: `activities.reload?.()` was a silent no-op, so a new
+    // comment only showed if the socket event arrived
+    await activities.value.reload();
   } finally {
     // Double-run scroll: once immediately after render, again after a short delay
     nextTick(() => ticketAgentActivitiesRef.value?.scrollToLatestActivity(true));

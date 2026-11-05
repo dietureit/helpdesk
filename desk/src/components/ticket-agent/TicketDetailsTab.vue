@@ -23,6 +23,7 @@
               :label="field.label"
               :placeholder="field.placeholder"
               :doctype="field.doctype"
+              :filters="field.fieldname === 'status' ? { name: ['!=', 'Closed'] } : null"
               :modelValue="field.value"
               :required="field.required"
               :disabled="isTicketResolved || field.disabled"
