@@ -1,5 +1,5 @@
 import { socket } from "@/socket";
-import { createResource } from "frappe-ui";
+import { createResource, getCachedResource } from "frappe-ui";
 import { defineStore } from "pinia";
 import { computed, ComputedRef } from "vue";
 
@@ -31,6 +31,17 @@ export const useConfigStore = defineStore("config", () => {
   );
 
   socket.on("helpdesk:settings-updated", () => configResource.reload());
+  // An HD Ticket Type changed (e.g. Enabled toggled): refetch every cached ticket type list.
+  // ["HD Ticket Type", "", hideMe] is the search cache key of components/frappe-ui/Link.vue.
+  socket.on("helpdesk:ticket-types-updated", () => {
+    for (const key of [
+      "InternalSlaOptions",
+      "TicketTypeForms",
+      ["HD Ticket Type", "", false],
+      ["HD Ticket Type", "", true],
+    ])
+      getCachedResource(key)?.reload();
+  });
 
   return {
     configResource,

@@ -28,6 +28,7 @@
     </template>
     <template #header-actions>
       <div class="flex items-center gap-2">
+        <Switch v-if="form" v-model="form.enabled" :label="__('Enabled')" />
         <Dropdown
           v-if="doc.data && !doc.data.is_system"
           placement="right"
@@ -229,6 +230,7 @@ import {
   Dropdown,
   FormControl,
   LoadingIndicator,
+  Switch,
   toast,
 } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
@@ -241,6 +243,7 @@ const emit = defineEmits<{ back: []; changed: [] }>();
 
 type FieldOption = { label: string; value: string; fieldtype: string };
 type Form = {
+  enabled: boolean;
   priority: string;
   description: string;
   sub_types: { key: number; sub_type: string }[];
@@ -263,6 +266,7 @@ const saved = ref("");
 
 function load(doc: Record<string, any>) {
   form.value = {
+    enabled: Boolean(doc.enabled),
     priority: doc.priority || "",
     description: doc.description || "",
     sub_types: (doc.sub_types || []).map((row) =>
@@ -285,6 +289,7 @@ function load(doc: Record<string, any>) {
 function payload() {
   const value = form.value!;
   return {
+    enabled: value.enabled ? 1 : 0,
     priority: value.priority || "",
     description: value.description,
     sub_types: value.sub_types

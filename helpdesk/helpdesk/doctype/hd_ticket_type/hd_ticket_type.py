@@ -12,8 +12,17 @@ class HDTicketType(Document):
         self.validate_sub_types()
         self.validate_first_contact_fields()
 
+    def on_update(self):
+        publish_ticket_types_updated()
+
     def on_trash(self):
         self.prevent_system_delete()
+
+    def after_delete(self):
+        publish_ticket_types_updated()
+
+    def after_rename(self, old, new, merge=False):
+        publish_ticket_types_updated()
 
     def prevent_system_delete(self):
         if self.is_system:
@@ -41,6 +50,11 @@ class HDTicketType(Document):
             seen.add(row.fieldname)
             # The grid shows what the field is; HD Ticket's metadata stays the source of truth.
             row.label, row.fieldtype, row.options = df.label, df.fieldtype, df.options or ""
+
+
+def publish_ticket_types_updated():
+    """Tell open Helpdesk and CRM pages to refetch their ticket type lists (Enabled toggled, renamed, ...)."""
+    frappe.publish_realtime("helpdesk:ticket-types-updated", after_commit=True)
 
 
 def get_first_contact_fields(ticket_type: str) -> dict[str, dict]:
@@ -75,10 +89,14 @@ def get_form_field_options():
 
 @frappe.whitelist()
 def get_ticket_type_forms():
-    """{ticket type: {"sub_types": [...], "fields": [...]}} for every type: drives the per-type ticket form."""
+    """{ticket type: {"enabled": 0|1, "sub_types": [...], "fields": [...]}} for every type, disabled ones too:
+    drives the per-type ticket form (a ticket keeps its type's form after the type is disabled)."""
     frappe.has_permission("HD Ticket Type", throw=True)
     meta = frappe.get_meta("HD Ticket")
-    forms = {name: {"sub_types": [], "fields": []} for name in frappe.get_all("HD Ticket Type", pluck="name")}
+    forms = {
+        row.name: {"enabled": row.enabled, "sub_types": [], "fields": []}
+        for row in frappe.get_all("HD Ticket Type", fields=["name", "enabled"])
+    }
     for row in frappe.get_all(
         "HD Ticket Sub Type",
         filters={"parenttype": "HD Ticket Type"},

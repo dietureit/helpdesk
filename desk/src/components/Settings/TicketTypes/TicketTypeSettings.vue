@@ -54,8 +54,17 @@
             class="flex h-12.5 w-full items-center justify-between gap-4 rounded px-2 text-left hover:bg-gray-50"
             @click="current = row.name"
           >
-            <span class="text-base font-medium text-ink-gray-7">
+            <span
+              class="flex items-center gap-2 text-base font-medium text-ink-gray-7"
+            >
               {{ row.name }}
+              <Badge
+                v-if="!row.enabled"
+                variant="subtle"
+                theme="gray"
+                size="sm"
+                :label="__('Disabled')"
+              />
             </span>
             <span class="flex items-center gap-2 text-p-sm text-ink-gray-5">
               {{ row.summary }}
@@ -113,6 +122,7 @@
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { __ } from "@/translation";
 import {
+  Badge,
   Button,
   createResource,
   Dialog,
@@ -125,7 +135,7 @@ import { computed, ref } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import TicketTypeEdit from "./TicketTypeEdit.vue";
 
-type TypeForm = { sub_types: string[]; fields: unknown[] };
+type TypeForm = { enabled: 0 | 1; sub_types: string[]; fields: unknown[] };
 
 // Same cache key as the ticket Details tab, so reloading here also refreshes a ticket open behind the modal
 const forms = createResource({
@@ -156,7 +166,11 @@ function summary({ sub_types, fields }: TypeForm) {
 
 const types = computed(() =>
   Object.entries((forms.data || {}) as Record<string, TypeForm>)
-    .map(([name, form]) => ({ name, summary: summary(form) }))
+    .map(([name, form]) => ({
+      name,
+      enabled: form.enabled,
+      summary: summary(form),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 );
 const rows = computed(() => {

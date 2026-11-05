@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "enabled",
   "is_system",
   "description",
   "priority",
@@ -17,6 +18,12 @@
   "first_contact_fields"
  ],
  "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
@@ -57,7 +64,7 @@
   }
  ],
  "links": [],
- "modified": "2026-10-28 21:00:00.000000",
+ "modified": "2026-11-05 13:18:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Ticket Type",
