@@ -146,7 +146,7 @@ def _parse_draft(content: str) -> dict:
 
 
 def _ticket_types() -> list[str]:
-    return frappe.get_all("HD Ticket Type", pluck="name", order_by="name asc")
+    return frappe.get_all("HD Ticket Type", filters={"enabled": 1}, pluck="name", order_by="name asc")
 
 
 def summarize_conversation(messages: list[dict]) -> dict[str, str]:
