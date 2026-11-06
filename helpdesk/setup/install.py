@@ -32,6 +32,7 @@ def after_install():
     add_property_setters()
     add_website_settings_permission()
     add_internal_sla_defaults()
+    seed_ai_issue_codes()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 
@@ -74,6 +75,17 @@ def add_internal_sla_defaults():
     for tier, target, unit in INTERNAL_SLA_TIERS:
         settings.append("tiers", {"tier": tier, "target": target, "unit": unit})
     settings.save(ignore_permissions=True)
+
+
+def seed_ai_issue_codes():
+    # Imported here so this module never depends on the AI Analysis package at import time.
+    from helpdesk.ai_analysis.registry import seed
+
+    seed()
+    # add_default_status already stored HD Settings values, so its JSON defaults never load, and fresh
+    # installs skip patches: apply the AI Analysis defaults like the patches.txt execute line does.
+    ai = [df for df in frappe.get_meta("HD Settings").fields if df.fieldname.startswith(("ai_analysis_", "enable_ai_"))]
+    frappe.db.set_single_value("HD Settings", {df.fieldname: df.default for df in ai if df.default})
 
 
 def add_default_sla():

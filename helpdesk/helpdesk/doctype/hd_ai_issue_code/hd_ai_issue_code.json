@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "autoname": "field:code",
+ "creation": "2026-11-06 07:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "code",
+  "label",
+  "kind",
+  "family",
+  "column_break_main",
+  "owner_department",
+  "severity_floor",
+  "is_food_safety",
+  "status",
+  "merged_into",
+  "rules_section",
+  "definition",
+  "examples"
+ ],
+ "fields": [
+  {
+   "description": "Stable id, e.g. DLV_LATE. Retire a code instead of deleting it.",
+   "fieldname": "code",
+   "fieldtype": "Data",
+   "label": "Code",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Label",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Kind",
+   "options": "Complaint\nRequest\nEnquiry\nFeedback\nOther"
+  },
+  {
+   "fieldname": "family",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Family",
+   "options": "FS\nNUT\nACC\nQLT\nPKG\nDLV\nTEC\nSUB\nCS\nREQ\nENQ\nFB\nNEW"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "owner_department",
+   "fieldtype": "Select",
+   "label": "Owner Department",
+   "options": "Kitchen & QA\nOperations & Packing\nDelivery\nCustomer Service\nTech\nMarketing & Sales\nFinance"
+  },
+  {
+   "description": "The lowest severity this issue is ever given.",
+   "fieldname": "severity_floor",
+   "fieldtype": "Select",
+   "label": "Severity Floor",
+   "options": "S1\nS2\nS3\nS4"
+  },
+  {
+   "fieldname": "is_food_safety",
+   "fieldtype": "Check",
+   "label": "Food Safety"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nRetired"
+  },
+  {
+   "description": "This code's history rolls up into the code chosen here. A merged code is retired.",
+   "fieldname": "merged_into",
+   "fieldtype": "Link",
+   "label": "Merged Into",
+   "options": "HD AI Issue Code"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Rules"
+  },
+  {
+   "description": "What the code covers. Include: ... Exclude: ...",
+   "fieldname": "definition",
+   "fieldtype": "Small Text",
+   "label": "Definition"
+  },
+  {
+   "description": "One example per line, in English and Arabic.",
+   "fieldname": "examples",
+   "fieldtype": "Small Text",
+   "label": "Examples"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-06 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD AI Issue Code",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

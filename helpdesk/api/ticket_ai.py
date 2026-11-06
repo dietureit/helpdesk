@@ -8,6 +8,8 @@ through `frappe.get_attr`, so there is no hard crm -> helpdesk import.
 The API key never leaves the server and is never logged; the transcript is never logged either.
 `requests` is called directly rather than through `frappe.make_post_request`, whose failure path
 dumps frame locals (key + transcript) into the Error Log.
+
+`chat_json` is the same client for AI Analysis (`helpdesk.ai_analysis`).
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from urllib.parse import urlparse
 import frappe
 import requests
 from frappe import _
-from frappe.utils import escape_html
+from frappe.utils import escape_html, flt
 
 SETTINGS = "HD Settings"
 KEY_FIELD = "ticket_ai_api_key"
@@ -48,7 +50,14 @@ SYSTEM_PROMPT = (
 
 
 class TicketAIError(frappe.ValidationError):
-    """Provider or configuration failure. The message is safe to show to the agent."""
+    """Provider or configuration failure. The message is safe to show to the agent.
+
+    `http_status` is the provider's HTTP error status, or None when there was none.
+    """
+
+    def __init__(self, *args, http_status: int | None = None):
+        super().__init__(*args)
+        self.http_status = http_status
 
 
 def get_config() -> dict[str, Any]:
@@ -149,6 +158,32 @@ def _ticket_types() -> list[str]:
     return frappe.get_all("HD Ticket Type", filters={"enabled": 1}, pluck="name", order_by="name asc")
 
 
+def _post(base_url: str, key: str, body: dict, timeout, log_title: str = "Ticket AI request failed") -> dict:
+    """The provider's reply JSON. Transport failures raise TicketAIError with an agent-safe message;
+    a body that is not JSON is one of them (requests' JSONDecodeError is a RequestException)."""
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.Timeout:
+        frappe.throw(_("The AI provider timed out. Please try again."), TicketAIError)
+    except requests.RequestException as exc:
+        # Status and type only: str(exc) carries the URL, never the key or the transcript.
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        frappe.log_error(title=log_title, message=f"{type(exc).__name__}: HTTP {status}")
+        error = TicketAIError(http_status=status)
+        if status in (401, 403):
+            frappe.throw(_("The AI provider rejected the API key. Check it in HD Settings, tab AI."), error)
+        if status == 429:
+            frappe.throw(_("The AI provider is rate limiting us. Please try again in a moment."), error)
+        frappe.throw(_("Could not reach the AI provider. Please try again shortly."), error)
+
+
 def summarize_conversation(messages: list[dict]) -> dict[str, str]:
     """Server-only: `{subject, description (HTML), ticket_type}` for the create-ticket form.
 
@@ -164,25 +199,8 @@ def summarize_conversation(messages: list[dict]) -> dict[str, str]:
     ticket_types = _ticket_types()
     content = ""
     try:
-        response = requests.post(
-            f"{config['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json=_request_body(config["model"], config["base_url"], messages, ticket_types),
-            timeout=TIMEOUT,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-    except requests.Timeout:
-        frappe.throw(_("The AI provider timed out. Please try again."), TicketAIError)
-    except requests.RequestException as exc:
-        # Status and type only: str(exc) carries the URL, never the key or the transcript.
-        status = getattr(getattr(exc, "response", None), "status_code", None)
-        frappe.log_error(title="Ticket AI request failed", message=f"{type(exc).__name__}: HTTP {status}")
-        if status in (401, 403):
-            frappe.throw(_("The AI provider rejected the API key. Check it in HD Settings, tab AI."), TicketAIError)
-        if status == 429:
-            frappe.throw(_("The AI provider is rate limiting us. Please try again in a moment."), TicketAIError)
-        frappe.throw(_("Could not reach the AI provider. Please try again shortly."), TicketAIError)
+        body = _request_body(config["model"], config["base_url"], messages, ticket_types)
+        content = _post(config["base_url"], key, body, TIMEOUT)["choices"][0]["message"]["content"]
     except (ValueError, KeyError, IndexError, TypeError):
         frappe.log_error(title="Ticket AI reply unreadable", message="The provider reply had no message content.")
         frappe.throw(_("The AI could not produce a ticket. Try again or fill it in manually."), TicketAIError)
@@ -197,3 +215,73 @@ def summarize_conversation(messages: list[dict]) -> dict[str, str]:
         "description": _text_to_html(str(draft.get("description") or "")),
         "ticket_type": ticket_type if ticket_type in ticket_types else "",
     }
+
+
+def chat_json(
+    system: str,
+    data: Any,
+    schema: dict | None = None,
+    *,
+    name: str = "ai_analysis",
+    model: str | None = None,
+    max_tokens: int = 1200,
+    timeout: tuple[int, int] = (5, 90),
+    temperature: float | None = 0,
+    provider: dict | None = None,
+    extra: dict | None = None,
+    log_title: str = "AI Analysis request failed",
+) -> tuple[dict | str, dict]:
+    """Server-only: one chat completion, `(parsed reply, meta)`. The reply is the JSON object when a
+    schema is given, else the text; meta is `{usage, cost, model, finish_reason, annotations}`.
+
+    Needs only the base URL and key: each feature checks its own switch. Non-str `data` is sent as
+    JSON with `ensure_ascii=False`, so Arabic reaches the model as text. Raises `TicketAIError`;
+    never logs the prompt, the reply or the key.
+    """
+    config = get_config()
+    key = _api_key()
+    if not (config["base_url"] and key):
+        frappe.throw(_("AI is not configured. Set the base URL and API key in HD Settings, tab AI."), TicketAIError)
+
+    body = {
+        "model": model or config["model"],
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)},
+        ],
+    }
+    if temperature is not None:
+        body["temperature"] = temperature
+    if schema is not None:
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": name, "strict": True, "schema": schema},
+        }
+    if (urlparse(config["base_url"]).hostname or "").endswith("openrouter.ai"):
+        body["provider"] = {"require_parameters": True, **(provider or {})}
+    body.update(extra or {})
+
+    reply = _post(config["base_url"], key, body, timeout, log_title)
+    unreadable = _("The AI reply could not be read. Please try again.")
+    try:
+        choice = reply["choices"][0]
+        text = choice["message"]["content"]
+        usage = reply.get("usage") or {}
+        meta = {
+            "usage": usage,
+            "cost": flt(usage.get("cost")),
+            "model": str(reply.get("model") or body["model"]),
+            "finish_reason": str(choice.get("finish_reason") or ""),
+            "annotations": choice["message"].get("annotations") or [],
+        }
+    except (AttributeError, KeyError, IndexError, TypeError):
+        frappe.throw(unreadable, TicketAIError)
+    if meta["finish_reason"] == "length":
+        frappe.throw(_("The AI reply was cut off. Please try again."), TicketAIError)
+    if not isinstance(text, str) or not text.strip():
+        frappe.throw(unreadable, TicketAIError)
+    parsed = text if schema is None else _parse_draft(text)
+    if not parsed:
+        frappe.throw(unreadable, TicketAIError)
+    return parsed, meta

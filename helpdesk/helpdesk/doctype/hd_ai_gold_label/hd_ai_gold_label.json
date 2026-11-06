@@ -1,0 +1,124 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-11-06 07:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "contact",
+  "labeller",
+  "lines",
+  "labels_section",
+  "codes",
+  "primary_code",
+  "max_severity",
+  "column_break_labels",
+  "is_final",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "contact",
+   "fieldtype": "Data",
+   "label": "Contact",
+   "reqd": 1
+  },
+  {
+   "fieldname": "labeller",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Labeller",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "description": "The contact's de-identified lines, oldest first. Label from these alone.",
+   "fieldname": "lines",
+   "fieldtype": "Long Text",
+   "label": "Conversation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "labels_section",
+   "fieldtype": "Section Break",
+   "label": "Your Labels"
+  },
+  {
+   "description": "One issue code per line, e.g. DLV_LATE. Use NEW when no code fits.",
+   "fieldname": "codes",
+   "fieldtype": "Small Text",
+   "label": "Codes"
+  },
+  {
+   "fieldname": "primary_code",
+   "fieldtype": "Link",
+   "label": "Primary Code",
+   "options": "HD AI Issue Code"
+  },
+  {
+   "fieldname": "max_severity",
+   "fieldtype": "Select",
+   "label": "Max Severity",
+   "options": "\nS1\nS2\nS3\nS4"
+  },
+  {
+   "fieldname": "column_break_labels",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_final",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Final"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-06 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD AI Gold Label",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

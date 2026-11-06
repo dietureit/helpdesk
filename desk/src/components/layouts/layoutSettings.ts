@@ -2,6 +2,7 @@ import LucideBarChart2 from "~icons/lucide/bar-chart-2";
 import LucideBookOpen from "~icons/lucide/book-open";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideContact2 from "~icons/lucide/contact-2";
+import LucideSparkles from "~icons/lucide/sparkles";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTimer from "~icons/lucide/timer";
 import PhoneIcon from "../icons/PhoneIcon.vue";
@@ -26,6 +27,11 @@ export const agentPortalSidebarOptions = [
     label: "SLA Breaches",
     icon: LucideTimer,
     to: "SlaBreachReport",
+  },
+  {
+    label: "AI Analysis",
+    icon: LucideSparkles,
+    to: "AIAnalysis",
   },
   {
     label: "Contacts",

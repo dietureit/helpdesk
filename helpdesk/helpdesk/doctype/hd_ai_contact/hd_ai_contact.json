@@ -1,0 +1,246 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-11-06 07:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_key",
+  "source",
+  "ticket",
+  "conversation",
+  "session_start",
+  "details_section",
+  "channel",
+  "started_on",
+  "ended_on",
+  "customer_key",
+  "language",
+  "column_break_details",
+  "msg_count",
+  "in_count",
+  "has_text",
+  "text_hash",
+  "replies_captured",
+  "folded",
+  "status_section",
+  "status",
+  "claim_token",
+  "claimed_at",
+  "exclusion_reason",
+  "column_break_status",
+  "safety_hits",
+  "attempts",
+  "error",
+  "labels_section",
+  "tagged_version",
+  "tagged_on",
+  "offered",
+  "looks_like_test",
+  "cost_usd",
+  "issues"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_key",
+   "fieldtype": "Data",
+   "label": "Source Key",
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Ticket\nChat"
+  },
+  {
+   "fieldname": "ticket",
+   "fieldtype": "Link",
+   "label": "Ticket",
+   "options": "HD Ticket",
+   "search_index": 1
+  },
+  {
+   "fieldname": "conversation",
+   "fieldtype": "Data",
+   "label": "Conversation"
+  },
+  {
+   "fieldname": "session_start",
+   "fieldtype": "Datetime",
+   "label": "Session Start"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Channel",
+   "options": "Ticket\nWhatsApp\nInstagram DM\nInstagram comment\nFacebook comment\nMessenger"
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Started On",
+   "search_index": 1
+  },
+  {
+   "fieldname": "ended_on",
+   "fieldtype": "Datetime",
+   "label": "Ended On"
+  },
+  {
+   "fieldname": "customer_key",
+   "fieldtype": "Data",
+   "label": "Customer Key",
+   "search_index": 1
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Select",
+   "label": "Language",
+   "options": "en\nar\nmixed"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "msg_count",
+   "fieldtype": "Int",
+   "label": "Messages"
+  },
+  {
+   "fieldname": "in_count",
+   "fieldtype": "Int",
+   "label": "Customer Messages"
+  },
+  {
+   "fieldname": "has_text",
+   "fieldtype": "Check",
+   "label": "Has Text"
+  },
+  {
+   "fieldname": "text_hash",
+   "fieldtype": "Data",
+   "label": "Text Hash"
+  },
+  {
+   "fieldname": "replies_captured",
+   "fieldtype": "Check",
+   "label": "Replies Captured"
+  },
+  {
+   "fieldname": "folded",
+   "fieldtype": "Int",
+   "label": "Chat Sessions Folded In"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nTagging\nTagged\nNo text\nExcluded\nFailed",
+   "search_index": 1
+  },
+  {
+   "fieldname": "claim_token",
+   "fieldtype": "Data",
+   "label": "Claim Token"
+  },
+  {
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed At"
+  },
+  {
+   "fieldname": "exclusion_reason",
+   "fieldtype": "Data",
+   "label": "Exclusion Reason"
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "safety_hits",
+   "fieldtype": "Small Text",
+   "label": "Safety Rule Hits"
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  },
+  {
+   "fieldname": "labels_section",
+   "fieldtype": "Section Break",
+   "label": "Labels"
+  },
+  {
+   "fieldname": "tagged_version",
+   "fieldtype": "Data",
+   "label": "Label Version"
+  },
+  {
+   "fieldname": "tagged_on",
+   "fieldtype": "Datetime",
+   "label": "Labelled On"
+  },
+  {
+   "fieldname": "offered",
+   "fieldtype": "Select",
+   "label": "Offered",
+   "options": "\nnone\napology_only\nreplacement\nrefund\ncredit\nother"
+  },
+  {
+   "fieldname": "looks_like_test",
+   "fieldtype": "Check",
+   "label": "Looks Like a Test"
+  },
+  {
+   "fieldname": "cost_usd",
+   "fieldtype": "Float",
+   "label": "Cost (USD)",
+   "precision": "6"
+  },
+  {
+   "fieldname": "issues",
+   "fieldtype": "Table",
+   "label": "Issues",
+   "options": "HD AI Contact Issue"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-06 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD AI Contact",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

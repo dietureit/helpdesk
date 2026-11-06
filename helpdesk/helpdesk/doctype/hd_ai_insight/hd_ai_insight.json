@@ -1,0 +1,223 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-11-06 07:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "insight_type",
+  "issue_code",
+  "period_start",
+  "period_end",
+  "week_start",
+  "filters_json",
+  "column_break_progress",
+  "status",
+  "step",
+  "progress_label",
+  "error",
+  "payload_section",
+  "pack_hash",
+  "input_json",
+  "alias_map",
+  "output_json",
+  "parent_insight",
+  "selected_json",
+  "note",
+  "models",
+  "question",
+  "decision_section",
+  "requested_by",
+  "decision",
+  "decision_reason",
+  "decision_note",
+  "column_break_decision",
+  "decided_by",
+  "decided_on",
+  "cost_usd",
+  "prompt_version"
+ ],
+ "fields": [
+  {
+   "fieldname": "insight_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Type",
+   "options": "Suggestions\nResearch\nBrief\nQuestion\nEvaluation"
+  },
+  {
+   "fieldname": "issue_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Issue Code",
+   "options": "HD AI Issue Code"
+  },
+  {
+   "fieldname": "period_start",
+   "fieldtype": "Date",
+   "label": "Period Start"
+  },
+  {
+   "fieldname": "period_end",
+   "fieldtype": "Date",
+   "label": "Period End"
+  },
+  {
+   "fieldname": "week_start",
+   "fieldtype": "Date",
+   "label": "Week Start"
+  },
+  {
+   "fieldname": "filters_json",
+   "fieldtype": "Small Text",
+   "label": "Filters"
+  },
+  {
+   "fieldname": "column_break_progress",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Queued\nRunning\nDone\nFailed\nNo synthesis"
+  },
+  {
+   "fieldname": "step",
+   "fieldtype": "Int",
+   "label": "Step"
+  },
+  {
+   "fieldname": "progress_label",
+   "fieldtype": "Data",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  },
+  {
+   "fieldname": "payload_section",
+   "fieldtype": "Section Break",
+   "label": "Payload"
+  },
+  {
+   "fieldname": "pack_hash",
+   "fieldtype": "Data",
+   "label": "Pack Hash"
+  },
+  {
+   "fieldname": "input_json",
+   "fieldtype": "Long Text",
+   "label": "Input (as sent)"
+  },
+  {
+   "fieldname": "alias_map",
+   "fieldtype": "Long Text",
+   "label": "Alias Map"
+  },
+  {
+   "fieldname": "output_json",
+   "fieldtype": "Long Text",
+   "label": "Output"
+  },
+  {
+   "fieldname": "parent_insight",
+   "fieldtype": "Link",
+   "label": "Parent Insight",
+   "options": "HD AI Insight"
+  },
+  {
+   "fieldname": "selected_json",
+   "fieldtype": "Small Text",
+   "label": "Selected"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  },
+  {
+   "fieldname": "models",
+   "fieldtype": "Small Text",
+   "label": "Models"
+  },
+  {
+   "fieldname": "question",
+   "fieldtype": "Small Text",
+   "label": "Question"
+  },
+  {
+   "fieldname": "decision_section",
+   "fieldtype": "Section Break",
+   "label": "Decision"
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "label": "Requested By",
+   "options": "User"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "decision",
+   "fieldtype": "Select",
+   "label": "Decision",
+   "options": "Pending\nAdopted\nRejected"
+  },
+  {
+   "fieldname": "decision_reason",
+   "fieldtype": "Select",
+   "label": "Decision Reason",
+   "options": "\nNot feasible\nAlready tried\nWrong cause\nToo costly\nOther"
+  },
+  {
+   "fieldname": "decision_note",
+   "fieldtype": "Small Text",
+   "label": "Decision Note"
+  },
+  {
+   "fieldname": "column_break_decision",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decided_by",
+   "fieldtype": "Link",
+   "label": "Decided By",
+   "options": "User"
+  },
+  {
+   "fieldname": "decided_on",
+   "fieldtype": "Datetime",
+   "label": "Decided On"
+  },
+  {
+   "fieldname": "cost_usd",
+   "fieldtype": "Float",
+   "label": "Cost (USD)"
+  },
+  {
+   "fieldname": "prompt_version",
+   "fieldtype": "Data",
+   "label": "Prompt Version"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-06 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD AI Insight",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

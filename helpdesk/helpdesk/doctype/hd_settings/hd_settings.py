@@ -22,6 +22,27 @@ class HDSettings(Document):
         self.validate_auto_close_days()
         self.validate_email_contents()
         self.validate_send_feedback_when_ticket_closed()
+        self.validate_ai_analysis()
+
+    def validate_ai_analysis(self):
+        """Only when AI Analysis is on. A blank model field means its default, as AI Analysis reads it."""
+        if not self.get("enable_ai_analysis"):
+            return
+        if not (self.get("ai_analysis_legal_approval") or "").strip():
+            frappe.throw(_("Enter the legal approval reference before enabling AI Analysis."))
+
+        def setting(fieldname):
+            return (self.get(fieldname) or "").strip() or self.meta.get_field(fieldname).default or ""
+
+        def vendor(model):
+            return model.split("/")[0].strip().lower()
+
+        council = [line.strip() for line in setting("ai_analysis_council_models").splitlines() if line.strip()]
+        vendors = {vendor(model) for model in council}
+        if len(council) > 3 or len(vendors) < 2:
+            frappe.throw(_('List 2 or 3 council models, one per line, from at least 2 vendors (the part before "/").'))
+        if vendor(setting("ai_analysis_chairman_model")) in vendors:
+            frappe.throw(_("The chairman model must come from a vendor that is not on the council."))
 
     def validate_auto_close_days(self):
         if self.auto_close_tickets and self.auto_close_after_days <= 0:

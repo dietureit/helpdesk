@@ -86,7 +86,22 @@
   "ticket_ai_base_url",
   "ticket_ai_model",
   "column_break_ticket_ai",
-  "ticket_ai_api_key"
+  "ticket_ai_api_key",
+  "ai_analysis_section",
+  "enable_ai_analysis",
+  "ai_analysis_legal_approval",
+  "ai_analysis_model",
+  "ai_analysis_council_models",
+  "ai_analysis_chairman_model",
+  "enable_ai_web_research",
+  "ai_analysis_research_model",
+  "column_break_ai_analysis",
+  "ai_analysis_start_date",
+  "ai_analysis_exclude_staff_phones",
+  "ai_analysis_require_zdr",
+  "ai_analysis_mask_health_quotes",
+  "ai_analysis_monthly_budget_usd",
+  "ai_analysis_retention_months"
  ],
  "fields": [
   {
@@ -564,12 +579,112 @@
    "fieldname": "ticket_ai_api_key",
    "fieldtype": "Password",
    "label": "API Key"
+  },
+  {
+   "description": "Finds recurring customer issues across tickets, chats and calls for the AI Analysis report. Uses the base URL and API key above.",
+   "fieldname": "ai_analysis_section",
+   "fieldtype": "Section Break",
+   "label": "AI Analysis"
+  },
+  {
+   "default": "0",
+   "description": "Needs the legal approval reference below.",
+   "fieldname": "enable_ai_analysis",
+   "fieldtype": "Check",
+   "label": "Enable AI Analysis"
+  },
+  {
+   "description": "PDPPL approval reference for sending de-identified customer text, health details included, to AI providers abroad. Required to enable.",
+   "fieldname": "ai_analysis_legal_approval",
+   "fieldtype": "Data",
+   "label": "Legal Approval Reference",
+   "mandatory_depends_on": "enable_ai_analysis"
+  },
+  {
+   "description": "Labels each contact and writes the weekly summary. Blank uses the ticket draft model above.",
+   "fieldname": "ai_analysis_model",
+   "fieldtype": "Data",
+   "label": "Labelling Model"
+  },
+  {
+   "default": "openai/gpt-5.4\ngoogle/gemini-2.5-pro",
+   "description": "Propose fixes for an issue. One model per line, 2 or 3, from at least 2 vendors (the part before \"/\").",
+   "fieldname": "ai_analysis_council_models",
+   "fieldtype": "Small Text",
+   "label": "Council Models"
+  },
+  {
+   "default": "anthropic/claude-sonnet-5.5",
+   "description": "Combines the council's options into one plan. Its vendor must not be on the council.",
+   "fieldname": "ai_analysis_chairman_model",
+   "fieldtype": "Data",
+   "label": "Chairman Model"
+  },
+  {
+   "default": "1",
+   "description": "Agents can research fixes for an issue on the web. Only a de-identified problem card, previewed first, is sent.",
+   "fieldname": "enable_ai_web_research",
+   "fieldtype": "Check",
+   "label": "Enable Web Research"
+  },
+  {
+   "default": "openai/gpt-4.1",
+   "description": "Runs the web research.",
+   "fieldname": "ai_analysis_research_model",
+   "fieldtype": "Data",
+   "label": "Research Model"
+  },
+  {
+   "fieldname": "column_break_ai_analysis",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Contacts before this date are left out.",
+   "fieldname": "ai_analysis_start_date",
+   "fieldtype": "Date",
+   "label": "Analyse From"
+  },
+  {
+   "default": "1",
+   "description": "Leave out chats and calls from employee and user phone numbers.",
+   "fieldname": "ai_analysis_exclude_staff_phones",
+   "fieldtype": "Check",
+   "label": "Exclude Staff Phones"
+  },
+  {
+   "default": "0",
+   "description": "Send only to providers that keep no data (OpenRouter). Fewer models qualify.",
+   "fieldname": "ai_analysis_require_zdr",
+   "fieldtype": "Check",
+   "label": "Require Zero Data Retention"
+  },
+  {
+   "default": "0",
+   "description": "Hide the words of serious food-safety and allergy quotes from agents who are not managers.",
+   "fieldname": "ai_analysis_mask_health_quotes",
+   "fieldtype": "Check",
+   "label": "Mask Health Quotes"
+  },
+  {
+   "default": "100",
+   "description": "AI jobs stop once this month's spend reaches it.",
+   "fieldname": "ai_analysis_monthly_budget_usd",
+   "fieldtype": "Float",
+   "label": "Monthly Budget (USD)",
+   "precision": "2"
+  },
+  {
+   "default": "18",
+   "description": "Analysis results older than this are deleted nightly.",
+   "fieldname": "ai_analysis_retention_months",
+   "fieldtype": "Int",
+   "label": "Keep Results For (Months)"
   }
  ],
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-29 00:59:40.026427",
+ "modified": "2026-11-06 07:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",

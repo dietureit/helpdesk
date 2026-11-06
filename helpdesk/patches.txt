@@ -40,3 +40,5 @@ helpdesk.patches.add_internal_sla_defaults
 helpdesk.patches.seed_complaint_fields_on_default_template
 helpdesk.patches.seed_ticket_type_forms
 helpdesk.patches.seed_messenger_sub_categories
+helpdesk.patches.seed_ai_issue_codes
+execute:frappe.db.set_single_value("HD Settings", {df.fieldname: df.default for df in frappe.get_meta("HD Settings").fields if df.default and df.fieldname.startswith(("ai_analysis_", "enable_ai_"))})

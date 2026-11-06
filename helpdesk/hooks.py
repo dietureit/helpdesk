@@ -35,7 +35,8 @@ scheduler_events = {
         "helpdesk.search.download_corpus",
     ],
     "daily": [
-        "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days"
+        "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days",
+        "helpdesk.ai_analysis.jobs.nightly",
     ],
     "hourly": [
         "helpdesk.helpdesk.doctype.hd_report_schedule.hd_report_schedule.send_scheduled_reports"
@@ -100,6 +101,7 @@ override_doctype_class = {
 ignore_links_on_delete = [
     "HD Notification",
     "HD Ticket Comment",
+    "HD AI Contact",
 ]
 
 # setup wizard

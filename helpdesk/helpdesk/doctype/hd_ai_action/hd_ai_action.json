@@ -1,0 +1,257 @@
+{
+ "actions": [],
+ "autoname": "HD-AIA-.#####",
+ "creation": "2026-11-06 07:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "issue_code",
+  "insight",
+  "card",
+  "owner_department",
+  "assigned_to",
+  "column_break_plan",
+  "status",
+  "due_date",
+  "done_on",
+  "plan",
+  "measurement_section",
+  "success_metric",
+  "exposure_kind",
+  "baseline_from",
+  "baseline_to",
+  "column_break_measurement",
+  "baseline_value",
+  "recent_value",
+  "target_value",
+  "verdict_section",
+  "verdict",
+  "verdict_p",
+  "target_met",
+  "verdict_checked_on",
+  "verdict_history",
+  "column_break_verdict",
+  "recurred",
+  "recurred_on",
+  "previous_action",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "issue_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Issue Code",
+   "options": "HD AI Issue Code"
+  },
+  {
+   "fieldname": "insight",
+   "fieldtype": "Link",
+   "label": "Insight",
+   "options": "HD AI Insight"
+  },
+  {
+   "fieldname": "card",
+   "fieldtype": "Select",
+   "label": "Card",
+   "options": "quick_win\nstructural_fix\ncombined_plan\ncustom"
+  },
+  {
+   "fieldname": "owner_department",
+   "fieldtype": "Select",
+   "label": "Owner Department",
+   "options": "Kitchen & QA\nOperations & Packing\nDelivery\nCustomer Service\nTech\nMarketing & Sales\nFinance"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Assigned To",
+   "options": "User"
+  },
+  {
+   "fieldname": "column_break_plan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Open\nIn progress\nDone\nDropped"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Due Date"
+  },
+  {
+   "fieldname": "done_on",
+   "fieldtype": "Date",
+   "label": "Done On"
+  },
+  {
+   "fieldname": "plan",
+   "fieldtype": "Long Text",
+   "label": "Plan"
+  },
+  {
+   "fieldname": "measurement_section",
+   "fieldtype": "Section Break",
+   "label": "Measurement"
+  },
+  {
+   "fieldname": "success_metric",
+   "fieldtype": "Select",
+   "label": "Success Metric",
+   "options": "cases_per_week\ncustomers_per_week\nrate_per_1000_deliveries"
+  },
+  {
+   "fieldname": "exposure_kind",
+   "fieldtype": "Select",
+   "label": "Exposure",
+   "options": "Deliveries\nDays"
+  },
+  {
+   "fieldname": "baseline_from",
+   "fieldtype": "Date",
+   "label": "Baseline From"
+  },
+  {
+   "fieldname": "baseline_to",
+   "fieldtype": "Date",
+   "label": "Baseline To"
+  },
+  {
+   "fieldname": "column_break_measurement",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "baseline_value",
+   "fieldtype": "Float",
+   "label": "Baseline"
+  },
+  {
+   "fieldname": "recent_value",
+   "fieldtype": "Float",
+   "label": "Recent"
+  },
+  {
+   "fieldname": "target_value",
+   "fieldtype": "Float",
+   "label": "Target"
+  },
+  {
+   "fieldname": "verdict_section",
+   "fieldtype": "Section Break",
+   "label": "Verdict"
+  },
+  {
+   "default": "Not yet",
+   "fieldname": "verdict",
+   "fieldtype": "Select",
+   "label": "Verdict",
+   "options": "Not yet\nLower than before\nInconclusive\nHigher than before\nNot enough data"
+  },
+  {
+   "fieldname": "verdict_p",
+   "fieldtype": "Float",
+   "label": "Verdict p-value"
+  },
+  {
+   "fieldname": "target_met",
+   "fieldtype": "Check",
+   "label": "Target Met"
+  },
+  {
+   "fieldname": "verdict_checked_on",
+   "fieldtype": "Date",
+   "label": "Verdict Checked On"
+  },
+  {
+   "fieldname": "verdict_history",
+   "fieldtype": "Long Text",
+   "label": "Verdict History"
+  },
+  {
+   "fieldname": "column_break_verdict",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "recurred",
+   "fieldtype": "Check",
+   "label": "Recurred"
+  },
+  {
+   "fieldname": "recurred_on",
+   "fieldtype": "Date",
+   "label": "Recurred On"
+  },
+  {
+   "fieldname": "previous_action",
+   "fieldtype": "Link",
+   "label": "Previous Action",
+   "options": "HD AI Action"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-06 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD AI Action",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Messenger Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}
