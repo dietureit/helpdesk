@@ -220,7 +220,7 @@ const exportRowCount = computed(
   () => listViewRef.value?.list?.data?.total_count ?? 0
 );
 const showExportModal = ref(false);
-const { getStatus, statuses } = useTicketStatusStore();
+const { getStatus, statuses, agentStatuses } = useTicketStatusStore();
 
 // Priority options
 const priorities = createResource({
@@ -435,8 +435,7 @@ const options = {
 };
 
 const statusOptionList = computed(() =>
-  (statuses.data || [])
-    .filter((s) => s.label_agent !== "Overdue")
+  agentStatuses()
     .map((s) => ({
       label: isCustomerPortal.value ? s.label_customer : s.label_agent,
       value: s.label_agent,

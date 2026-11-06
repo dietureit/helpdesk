@@ -36,6 +36,13 @@ export const useTicketStatusStore = defineStore("ticketStatus", () => {
         s.label_agent === label || s.label_customer === label
     );
   }
+  // Statuses an agent may pick. "Closed" stays for the system (merged tickets, feedback,
+  // auto-close) and can't be disabled, so it is left out here; agents resolve instead.
+  function agentStatuses(): HDTicketStatus[] {
+    return (statuses.data || []).filter(
+      (s: HDTicketStatus) => s.enabled && s.label_agent !== "Closed"
+    );
+  }
   const colorMap = {
     Green: ["text-green-700", "bg-surface-green-2"],
     Black: ["text-black", "bg-surface-gray-2"],
@@ -57,6 +64,7 @@ export const useTicketStatusStore = defineStore("ticketStatus", () => {
     statuses,
     colorMap,
     getStatus,
+    agentStatuses,
   };
 });
 function parseColor(color: string): string {

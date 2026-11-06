@@ -350,7 +350,7 @@ const breadcrumbs = computed(() => {
 });
 
 const dropdownOptions = computed(() =>
-  ticketStatusStore.statuses.data?.map((o: HDTicketStatus) => ({
+  ticketStatusStore.agentStatuses().map((o: HDTicketStatus) => ({
     label: o.label_agent,
     value: o.label_agent,
     onClick: () => updateTicket("status", o.label_agent),
