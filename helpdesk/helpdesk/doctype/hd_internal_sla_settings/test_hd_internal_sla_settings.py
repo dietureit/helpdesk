@@ -187,7 +187,11 @@ class TestHDInternalSLASettings(FrappeTestCase):
         self.settings.append("breach_recipients", {"user": "cx@x.com"})
         inserted, mailed = [], []
         with (
-            patch.object(sla.frappe, "sendmail", side_effect=lambda recipients, **kwargs: mailed.append(sorted(recipients))),
+            patch.object(
+                sla.frappe,
+                "sendmail",
+                side_effect=lambda recipients, **kwargs: mailed.append((sorted(recipients), kwargs.get("delayed"))),
+            ),
             patch.object(
                 sla.frappe,
                 "get_doc",
@@ -205,15 +209,15 @@ class TestHDInternalSLASettings(FrappeTestCase):
             sla.notify(ticket, "Met", self.settings)
             self.assertEqual((inserted, mailed), ([], []))
             sla.notify(ticket, "At Risk", self.settings)  # nobody assigned: the alert people still get it
-            self.assertEqual((inserted, mailed), (["cx@x.com"], [["cx@x.com"]]))
+            self.assertEqual((inserted, mailed), (["cx@x.com"], [(["cx@x.com"], None)]))
             ticket._assign = '["a@x.com"]'
             # the warning reaches the assignee and the alert people, by notification and by email
             sla.notify(ticket, "At Risk", self.settings)
             self.assertEqual(sorted(inserted[1:]), ["a@x.com", "cx@x.com"])
-            self.assertEqual(mailed[1:], [["a@x.com", "cx@x.com"]])
+            self.assertEqual(mailed[1:], [(["a@x.com", "cx@x.com"], None)])  # warning stays on the queue
             sla.notify(ticket, "Breached", self.settings)
             self.assertEqual(sorted(inserted[3:]), ["a@x.com", "cx@x.com"])
-            self.assertEqual(mailed[2:], [["a@x.com", "cx@x.com"]])
+            self.assertEqual(mailed[2:], [(["a@x.com", "cx@x.com"], False)])  # breach mail leaves now
             self.settings.send_email = 0
             sla.notify(ticket, "At Risk", self.settings)
             self.assertEqual(len(mailed), 3)  # email switched off: notifications only

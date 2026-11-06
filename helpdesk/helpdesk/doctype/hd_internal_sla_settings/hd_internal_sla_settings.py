@@ -166,17 +166,18 @@ def scan_internal_sla():
     if not settings.enabled:
         return
     now = now_datetime()
-    tickets = frappe.get_all(
-        "HD Ticket",
-        filters={
-            "investigation_status": "Open",
-            "is_merged": 0,
-            "internal_sla_status": ["in", ["On Track", "At Risk"]],
-            "internal_sla_warning_by": ["<=", now],
-        },
-        fields=["name", "subject", "owner", "_assign", *TICKET_FIELDS],
-    )
-    for ticket in tickets:
+    # Warning time and due time are separate clocks: a ticket can be due with no warning timestamp.
+    fields = ["name", "subject", "owner", "_assign", *TICKET_FIELDS]
+    base = {
+        "investigation_status": "Open",
+        "is_merged": 0,
+        "internal_sla_status": ["in", ["On Track", "At Risk"]],
+    }
+    tickets = {}
+    for extra in ({"internal_sla_warning_by": ["<=", now]}, {"internal_sla_due_by": ["<=", now]}):
+        for ticket in frappe.get_all("HD Ticket", filters={**base, **extra}, fields=fields):
+            tickets.setdefault(ticket.name, ticket)
+    for ticket in tickets.values():
         status = get_status(ticket, now)
         if status == ticket.internal_sla_status:
             continue
@@ -213,16 +214,20 @@ def notify(ticket, status, settings):
     due = format_datetime(ticket.internal_sla_due_by, "d MMM yyyy, h:mm a")
     message = message.format(ticket.name, ticket.internal_sla_tier, due, ticket.subject)
     for user in users:
-        frappe.get_doc(
-            {
-                "doctype": "HD Notification",
-                "user_from": "Administrator",
-                "user_to": user.name,
-                "notification_type": "SLA Alert",
-                "reference_ticket": ticket.name,
-                "message": message,
-            }
-        ).insert(ignore_permissions=True)
+        try:
+            frappe.get_doc(
+                {
+                    "doctype": "HD Notification",
+                    "user_from": "Administrator",
+                    "user_to": user.name,
+                    "notification_type": "SLA Alert",
+                    "reference_ticket": ticket.name,
+                    "message": message,
+                }
+            ).insert(ignore_permissions=True)
+        except Exception:
+            # One bad recipient must not skip the breach email for everyone else.
+            frappe.log_error(f"Internal SLA alert notification failed for ticket {ticket.name}")
 
     if not settings.send_email:
         return
@@ -232,6 +237,7 @@ def notify(ticket, status, settings):
     link = get_url(f"/helpdesk/tickets/{ticket.name}")
     try:
         # No reference_doctype: a reply to this alert must not be threaded into the customer's ticket.
+        # Breach mail leaves in this same minute. The warning mail stays on the email queue.
         frappe.sendmail(
             recipients=recipients,
             subject=message,
@@ -239,6 +245,7 @@ def notify(ticket, status, settings):
                 f'{escape_html(message)}<br><br><a href="{link}">{link}</a><br><br>'
                 f"{_('This is an automated alert; replies are not monitored.')}"
             ),
+            **({"delayed": False} if status == "Breached" else {}),
         )
     except Exception:
         frappe.log_error(f"Internal SLA alert email failed for ticket {ticket.name}")
