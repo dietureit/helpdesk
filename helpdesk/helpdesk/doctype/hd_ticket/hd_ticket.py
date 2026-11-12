@@ -9,6 +9,7 @@ import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.core.page.permission_manager.permission_manager import remove
+from frappe.desk.form.assign_to import _add as add_assignment
 from frappe.desk.form.assign_to import add as assign
 from frappe.desk.form.assign_to import clear as clear_all_assignments
 from frappe.desk.form.assign_to import get as get_assignees
@@ -272,13 +273,13 @@ class HDTicket(Document):
                     for agent in agents:
                         self.notify_agent(agent.name, "Reaction")
 
-        # Send notification to team members when agent_group is assigned/changed
+        # Send notification to team members when agent_group is assigned/changed.
+        # Sync assignees first so notifications see the new team's people.
         if self.agent_group and self.has_value_changed("agent_group"):
-            self.assign_all_team_members_if_enabled()
+            self.sync_assignees_on_team_change()
             # self.send_team_notification_email()
             self.create_team_notifications()
 
-        self.remove_assignment_if_not_in_team()
         self.publish_update()
         self.update_search_index()
         self.enqueue_notification_automation_rules()
@@ -477,65 +478,91 @@ class HDTicket(Document):
     def generate_key(self):
         self.key = uuid.uuid4()
 
-    def remove_assignment_if_not_in_team(self):
-        """
-        Removes the assignment if the agent is not in the team.
-        Should be called inside on_update
-        """
-        if self.is_new():
-            return
-        if not self.agent_group or (hasattr(self, "_assign") and not self._assign):
-            return
-        if self.has_value_changed("agent_group") and self.status_category == "Open":
-            current_assigned_agent = self.get_assigned_agent()
-            if not current_assigned_agent:
-                return
-            is_agent_in_assigned_team = self.agent_in_assigned_team(
-                current_assigned_agent, self.agent_group
-            )
+    def sync_assignees_on_team_change(self):
+        """Replace assignees when the team changes on an open ticket.
 
-            if (
-                not is_agent_in_assigned_team
-            ) and self.users_present_in_team_assignment_rule():
-                clear_all_assignments("HD Ticket", self.name)
-                frappe.publish_realtime(
-                    "helpdesk:update-ticket-assignee",
-                    {"ticket_id": self.name},
-                    after_commit=True,
+        Assign-all writes every member of the new team. Otherwise people who
+        are not on the new team are dropped. If none of the new team's members
+        remain, the ticket is cleared and the Assignment Rule (it runs after
+        on_update) assigns one member. Assignees are read from ToDo, not the
+        in-memory _assign, which is stale inside on_update.
+        """
+        if self.is_new() or not self.agent_group or self.status_category != "Open":
+            return
+        if not self.has_value_changed("agent_group"):
+            return
+
+        team_members = list(
+            dict.fromkeys(
+                user
+                for user in frappe.get_all(
+                    "HD Team Member",
+                    filters={"parent": self.agent_group},
+                    pluck="user",
                 )
-
-    def agent_in_assigned_team(self, agent, team):
-        return frappe.db.exists(
-            "HD Team Member",
-            {
-                "parent": team,
-                "user": agent,
+                if user
+            )
+        )
+        current = frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "HD Ticket",
+                "reference_name": str(self.name),
+                "status": ("not in", ("Cancelled", "Closed")),
+                "allocated_to": ("is", "set"),
             },
+            pluck="allocated_to",
         )
 
-    def users_present_in_team_assignment_rule(self):
-        if not self.agent_group:
-            return False
-
-        assignment_rule = frappe.db.get_value(
-            "HD Team", self.agent_group, "assignment_rule"
+        assign_all = int(
+            frappe.get_cached_value(
+                "HD Settings",
+                "HD Settings",
+                "assign_all_team_members_on_team_assignment",
+            )
+            or 0
         )
-        if not assignment_rule:
-            return False
+        if assign_all:
+            desired = team_members
+        else:
+            on_team = set(team_members)
+            desired = [user for user in current if user in on_team]
+            # Nobody from the new team is left. Clear and let the rule assign.
+            if not desired:
+                if current:
+                    clear_all_assignments(
+                        "HD Ticket", self.name, ignore_permissions=True
+                    )
+                    self._publish_assignee_update()
+                return
 
-        is_disabled = frappe.db.get_value(
-            "Assignment Rule", assignment_rule, "disabled"
+        if set(desired) == set(current):
+            return
+
+        clear_all_assignments("HD Ticket", self.name, ignore_permissions=True)
+        if desired:
+            try:
+                add_assignment(
+                    {
+                        "assign_to": desired,
+                        "doctype": "HD Ticket",
+                        "name": self.name,
+                    },
+                    ignore_permissions=True,
+                )
+            except Exception:
+                frappe.log_error(
+                    title="HD Ticket Team Members Assignment Error",
+                    message=frappe.get_traceback(),
+                )
+        self._publish_assignee_update()
+
+    def _publish_assignee_update(self):
+        frappe.publish_realtime(
+            "helpdesk:update-ticket-assignee",
+            {"ticket_id": self.name},
+            after_commit=True,
         )
-        if is_disabled:
-            return False
-
-        users = frappe.get_all(
-            "Assignment Rule User", filters={"parent": assignment_rule}
-        )
-        if not users:
-            return False
-
-        return True
 
     @frappe.whitelist()
     def assign_agent(self, agent):

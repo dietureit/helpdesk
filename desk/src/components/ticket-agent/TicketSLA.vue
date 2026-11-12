@@ -76,6 +76,7 @@
 
 <script setup lang="ts">
 import { useShortcut } from "@/composables/shortcuts";
+import { dayjs } from "@/dayjs";
 import { AssigneeSymbol, TicketSymbol } from "@/types";
 import {
   copyToClipboard,
@@ -83,7 +84,7 @@ import {
   dateTooltipFormat,
   formatTime,
 } from "@/utils";
-import { Badge, dayjs, Tooltip } from "frappe-ui";
+import { Badge, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 import { useUserStore } from "@/stores/user";
 import MultipleAvatar from "../MultipleAvatar.vue";
@@ -136,10 +137,7 @@ const resolutionBy = computed(() => {
       date: ticket.value.doc?.resolution_date,
     };
   } else {
-    let resolutionBy = formatTimeShort(
-      String(new Date()),
-      ticket.value.doc?.resolution_by
-    );
+    let resolutionBy = formatTimeShort(ticket.value.doc?.resolution_by);
     return {
       label: `Failed by ${resolutionBy}`,
       color: "red",
@@ -149,23 +147,20 @@ const resolutionBy = computed(() => {
 });
 
 function formatTimeShort(date: string, end?: string): string {
-  if (!end) {
-    end = dayjs().toString();
-  }
-  let _date = dayjs(date);
-  let duration = dayjs.duration(_date.diff(dayjs(end)));
-
-  let days = duration.days();
-  let hours = duration.hours();
-  let minutes = duration.minutes();
+  const start = dayjs(date);
+  const finish = end ? dayjs(end) : dayjs();
+  const totalMinutes = Math.abs(start.diff(finish, "minute"));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
 
   if (days > 0) {
     return `${days}d ${hours}h`;
-  } else if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else {
-    return `${minutes}m`;
   }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }
 
 useShortcut({ meta: true, shift: true, key: "." }, () => {
