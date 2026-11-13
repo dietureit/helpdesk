@@ -50,6 +50,7 @@ def get_user():
         "user_name": user_name,
         "username": username,
         "time_zone": user.time_zone,
+        "system_time_zone": frappe.utils.get_system_timezone(),
         "language": language,
     }
 

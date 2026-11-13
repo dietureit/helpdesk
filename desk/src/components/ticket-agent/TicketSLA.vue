@@ -39,7 +39,11 @@
       <div class="flex items-center gap-1">
         <span>Resolution </span>
         <Tooltip
-          :text="dateFormat(resolutionBy.date, dateTooltipFormat)"
+          :text="
+            resolutionBy.date
+              ? formatInUserTz(resolutionBy.date, dateTooltipFormat)
+              : ''
+          "
           :hover-delay="0.25"
           :placement="'top'"
         >
@@ -76,14 +80,9 @@
 
 <script setup lang="ts">
 import { useShortcut } from "@/composables/shortcuts";
-import { dayjs } from "@/dayjs";
+import { dayjs, formatInUserTz, inSystemTz } from "@/dayjs";
 import { AssigneeSymbol, TicketSymbol } from "@/types";
-import {
-  copyToClipboard,
-  dateFormat,
-  dateTooltipFormat,
-  formatTime,
-} from "@/utils";
+import { copyToClipboard, dateTooltipFormat, formatTime } from "@/utils";
 import { Badge, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 import { useUserStore } from "@/stores/user";
@@ -102,11 +101,11 @@ const resolutionBy = computed(() => {
   if (
     ticket.value.doc?.status_category === "Paused" &&
     ticket.value.doc?.on_hold_since &&
-    dayjs(ticket.value.doc?.resolution_by).isAfter(
-      dayjs(ticket.value.doc?.on_hold_since)
+    inSystemTz(ticket.value.doc?.resolution_by).isAfter(
+      inSystemTz(ticket.value.doc?.on_hold_since)
     )
   ) {
-    let timeLeft = dayjs(ticket.value.doc?.resolution_by).diff(dayjs(), "s");
+    let timeLeft = inSystemTz(ticket.value.doc?.resolution_by).diff(dayjs(), "s");
     return {
       label: `${formatTime(timeLeft)} left (On Hold)`,
       color: "blue",
@@ -114,7 +113,7 @@ const resolutionBy = computed(() => {
     };
   } else if (
     !ticket.value.doc?.resolution_date &&
-    dayjs().isBefore(dayjs(ticket.value.doc?.resolution_by))
+    dayjs().isBefore(inSystemTz(ticket.value.doc?.resolution_by))
   ) {
     let resolutionBy = formatTimeShort(ticket.value.doc?.resolution_by);
     return {
@@ -123,8 +122,8 @@ const resolutionBy = computed(() => {
       date: ticket.value.doc?.resolution_by,
     };
   } else if (
-    dayjs(ticket.value.doc?.resolution_date).isBefore(
-      dayjs(ticket.value.doc?.resolution_by)
+    inSystemTz(ticket.value.doc?.resolution_date).isBefore(
+      inSystemTz(ticket.value.doc?.resolution_by)
     )
   ) {
     let resolutionBy = formatTimeShort(
@@ -147,8 +146,8 @@ const resolutionBy = computed(() => {
 });
 
 function formatTimeShort(date: string, end?: string): string {
-  const start = dayjs(date);
-  const finish = end ? dayjs(end) : dayjs();
+  const start = inSystemTz(date);
+  const finish = end ? inSystemTz(end) : dayjs();
   const totalMinutes = Math.abs(start.diff(finish, "minute"));
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
