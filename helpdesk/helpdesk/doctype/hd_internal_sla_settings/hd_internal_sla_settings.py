@@ -106,6 +106,7 @@ def apply_internal_sla(doc):
     elif not is_agent():
         for field in TICKET_FIELDS:
             doc.set(field, old.get(field))
+        set_resolution_from_internal_sla(doc)
         return
     else:
         # Only this engine writes the computed fields: a stale Desk form or an API call can't overwrite them.
@@ -135,6 +136,24 @@ def apply_internal_sla(doc):
             doc.internal_sla_status = ""
         else:
             doc.internal_sla_status = get_status(doc) if doc.investigation_status == "Resolved" else "On Track"
+    set_resolution_from_internal_sla(doc)
+
+
+def set_resolution_from_internal_sla(doc):
+    """Resolution deadline is the internal SLA due time for this ticket's tier.
+
+    A ticket that is already resolved keeps the deadline it was closed with.
+    The priority SLA recalculates resolution_by on every save, so restore both
+    that deadline and the agreement status."""
+    due = doc.get("internal_sla_due_by")
+    if not due:
+        return
+    old = doc.get_doc_before_save()
+    if old and old.get("resolution_date") and doc.get("resolution_date"):
+        doc.resolution_by = old.get("resolution_by")
+        doc.agreement_status = old.get("agreement_status")
+        return
+    doc.resolution_by = due
 
 
 def set_due_times(doc, settings):

@@ -99,6 +99,12 @@ class HDTicket(Document):
     def before_save(self):
         self.apply_sla()
         apply_internal_sla(self)
+        # Priority SLA writes resolution_by first. An open ticket with an internal SLA
+        # takes that due as its deadline. A ticket already resolved keeps the status it closed with.
+        old = self.get_doc_before_save()
+        still_resolved = old and old.get("resolution_date") and self.resolution_date
+        if self.internal_sla_due_by and self.sla and not still_resolved:
+            frappe.get_cached_doc("HD Service Level Agreement", self.sla).handle_agreement_status(self)
         if not self.is_new():
             self.handle_ticket_activity_update()
 
