@@ -4,7 +4,8 @@ from frappe.model.document import Document
 from frappe.utils import cint
 
 # Routing and workflow fields are never part of the per-type ticket form.
-FORM_FIELD_BLOCKLIST = {"status", "agreement_status", "ticket_type", "sub_type", "agent_group"}
+# description is the Details box (the ticket body and the opening Activity comment).
+FORM_FIELD_BLOCKLIST = {"status", "agreement_status", "ticket_type", "sub_type", "agent_group", "description"}
 
 
 class HDTicketType(Document):

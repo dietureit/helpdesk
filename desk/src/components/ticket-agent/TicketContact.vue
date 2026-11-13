@@ -48,9 +48,9 @@
 </template>
 
 <script setup lang="ts">
-import { dayjs } from "@/dayjs";
+import { dayjs, formatInUserTz, inSystemTz } from "@/dayjs";
 import { TicketSymbol } from "@/types";
-import { dateFormat, dateTooltipFormat } from "@/utils";
+import { dateTooltipFormat } from "@/utils";
 import { computed, inject } from "vue";
 
 const ticket = inject(TicketSymbol);
@@ -91,8 +91,11 @@ const internalSla = computed(() => {
   if (doc.investigation_status !== "Resolved") {
     // the stored status only moves when the scheduler runs, so work it out from the due times
     const now = dayjs();
-    if (!now.isBefore(dayjs.tz(doc.internal_sla_due_by))) status = "Breached";
-    else if (doc.internal_sla_warning_by && !now.isBefore(dayjs.tz(doc.internal_sla_warning_by)))
+    if (!now.isBefore(inSystemTz(doc.internal_sla_due_by))) status = "Breached";
+    else if (
+      doc.internal_sla_warning_by &&
+      !now.isBefore(inSystemTz(doc.internal_sla_warning_by))
+    )
       status = "At Risk";
     else status = "On Track";
   }
@@ -100,7 +103,7 @@ const internalSla = computed(() => {
     tier: doc.internal_sla_tier,
     status,
     dotClass: INTERNAL_SLA_DOT[status] || "bg-surface-gray-6",
-    due: dateFormat(doc.internal_sla_due_by, dateTooltipFormat),
+    due: formatInUserTz(doc.internal_sla_due_by, dateTooltipFormat),
   };
 });
 
@@ -108,7 +111,7 @@ const resolutionDate = computed(() => {
   const doc = ticket.value?.doc;
   const resolutionDateValue = doc?.resolution_date || doc?.resolution_by;
   return resolutionDateValue
-    ? dateFormat(resolutionDateValue, dateTooltipFormat)
+    ? formatInUserTz(resolutionDateValue, dateTooltipFormat)
     : "-";
 });
 </script>

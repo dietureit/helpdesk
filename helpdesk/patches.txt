@@ -40,3 +40,4 @@ helpdesk.patches.add_internal_sla_defaults
 helpdesk.patches.seed_complaint_fields_on_default_template
 helpdesk.patches.seed_ticket_type_forms
 helpdesk.patches.seed_messenger_sub_categories
+helpdesk.patches.split_ticket_description_field
