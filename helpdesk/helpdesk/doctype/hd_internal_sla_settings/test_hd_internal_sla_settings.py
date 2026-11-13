@@ -97,6 +97,7 @@ class TestHDInternalSLASettings(FrappeTestCase):
         self.assertEqual(doc.investigation_status, "Open")
         self.assertEqual(doc.internal_sla_tier, "Fast")
         self.assertEqual(doc.internal_sla_due_by, THU + timedelta(minutes=15))
+        self.assertEqual(doc.resolution_by, doc.internal_sla_due_by)
         self.assertEqual(doc.internal_sla_warning_by, THU + timedelta(minutes=12))
         self.assertEqual(doc.internal_sla_status, "On Track")
 
@@ -104,6 +105,7 @@ class TestHDInternalSLASettings(FrappeTestCase):
         doc = self.ticket(ticket_type="Problem")
         sla.apply_internal_sla(doc)
         self.assertEqual((doc.investigation_status, doc.internal_sla_tier, doc.internal_sla_due_by), ("Open", None, None))
+        self.assertIsNone(doc.resolution_by)
 
     def test_retyping_keeps_a_hand_picked_tier(self):
         tracked = {"investigation_status": "Open", "internal_sla_due_by": THU + timedelta(days=2)}
@@ -157,6 +159,27 @@ class TestHDInternalSLASettings(FrappeTestCase):
         doc = self.ticket(old, **{**old, "internal_sla_status": "On Track", "internal_sla_due_by": THU})
         sla.apply_internal_sla(doc)
         self.assertEqual((doc.internal_sla_status, doc.internal_sla_due_by), ("At Risk", due))
+
+    def test_resolved_ticket_keeps_its_resolution_deadline(self):
+        due = THU + timedelta(minutes=15)
+        closed_at = THU + timedelta(minutes=10)
+        priority_deadline = THU + timedelta(hours=4)
+        old = {
+            "investigation_status": "Open",
+            "internal_sla_tier": "Fast",
+            "internal_sla_due_by": due,
+            "resolution_date": closed_at,
+            "resolution_by": priority_deadline,
+            "agreement_status": "Fulfilled",
+        }
+        doc = self.ticket(old, **old)
+        sla.apply_internal_sla(doc)
+        self.assertEqual(doc.resolution_by, priority_deadline)
+        self.assertEqual(doc.agreement_status, "Fulfilled")
+
+        reopened = self.ticket(old, **{**old, "resolution_date": None})
+        sla.apply_internal_sla(reopened)
+        self.assertEqual(reopened.resolution_by, due)
 
     def test_hand_picked_no_sla_survives_retyping(self):
         old = {"investigation_status": "Open", "ticket_type": "Quality", "internal_sla_tier": ""}
