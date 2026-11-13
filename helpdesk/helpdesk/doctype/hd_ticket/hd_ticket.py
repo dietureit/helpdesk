@@ -215,6 +215,14 @@ class HDTicket(Document):
         if not self.ticket_type:
             return
 
+        if self.is_new():
+            if self.agent_group:
+                return
+        elif not self.has_value_changed("ticket_type") or self.has_value_changed(
+            "agent_group"
+        ):
+            return
+
         settings = frappe.get_cached_doc("HD Settings", "HD Settings")
         mapping_rows = settings.get("ticket_type_team_assignment_rules") or []
         if not mapping_rows:

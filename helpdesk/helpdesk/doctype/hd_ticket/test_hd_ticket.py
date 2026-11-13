@@ -2,7 +2,10 @@
 # See license.txt
 
 import frappe
-from frappe.tests import IntegrationTestCase
+try:
+    from frappe.tests import IntegrationTestCase
+except ImportError:
+    from frappe.tests.utils import FrappeTestCase as IntegrationTestCase
 from frappe.utils import add_to_date, get_datetime, getdate
 
 from helpdesk.test_utils import (
@@ -580,3 +583,62 @@ class TestHDTicket(IntegrationTestCase):
         remove_holidays()
         frappe.db.set_single_value("HD Settings", "default_ticket_status", "Open")
         frappe.delete_doc("HD Ticket Status", "New", force=True)
+
+
+class TestTicketTeamMapping(IntegrationTestCase):
+    def _make_doc(self, old=None, **values):
+        doc = frappe.new_doc("HD Ticket")
+        doc.update(values)
+        if old is not None:
+            doc.set("__islocal", None)
+            doc._doc_before_save = frappe._dict(old)
+        return doc
+
+    def test_manual_team_change_is_preserved_while_type_change_remaps(self):
+        from unittest.mock import patch
+
+        fake_settings = frappe._dict(
+            ticket_type_team_assignment_rules=[
+                frappe._dict(enabled=1, ticket_type="Delivery Issues", team="Delivery Issues"),
+                frappe._dict(enabled=1, ticket_type="Quality", team="Hygiene"),
+            ]
+        )
+        with patch.object(frappe, "get_cached_doc", return_value=fake_settings):
+            # 1. New ticket with no explicit team auto-maps from ticket_type
+            new_doc = self._make_doc(ticket_type="Delivery Issues")
+            new_doc.apply_team_mapping_from_ticket_type()
+            self.assertEqual(new_doc.agent_group, "Delivery Issues")
+
+            # 2. New ticket with explicit team keeps explicit team
+            explicit_new = self._make_doc(ticket_type="Delivery Issues", agent_group="Hygiene")
+            explicit_new.apply_team_mapping_from_ticket_type()
+            self.assertEqual(explicit_new.agent_group, "Hygiene")
+
+            # 3. Existing ticket: changing Team manually (e.g. Delivery Issues -> Hygiene) is NOT reverted
+            manual_team = self._make_doc(
+                old={"ticket_type": "Delivery Issues", "agent_group": "Delivery Issues"},
+                ticket_type="Delivery Issues",
+                agent_group="Hygiene",
+            )
+            manual_team.apply_team_mapping_from_ticket_type()
+            self.assertEqual(manual_team.agent_group, "Hygiene")
+
+            # 4. Existing ticket: editing another field after manual team change preserves Hygiene
+            other_edit = self._make_doc(
+                old={"ticket_type": "Delivery Issues", "agent_group": "Hygiene", "priority": "Medium"},
+                ticket_type="Delivery Issues",
+                agent_group="Hygiene",
+                priority="High",
+            )
+            other_edit.apply_team_mapping_from_ticket_type()
+            self.assertEqual(other_edit.agent_group, "Hygiene")
+
+            # 5. Existing ticket: changing ticket_type remaps Team to the new type's mapped team
+            type_change = self._make_doc(
+                old={"ticket_type": "Delivery Issues", "agent_group": "Delivery Issues"},
+                ticket_type="Quality",
+                agent_group="Delivery Issues",
+            )
+            type_change.apply_team_mapping_from_ticket_type()
+            self.assertEqual(type_change.agent_group, "Hygiene")
+
