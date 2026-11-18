@@ -10,7 +10,13 @@ from pypika import Case
 from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings import (
     get_settings as get_internal_sla_settings,
 )
-from helpdesk.utils import agent_only, is_dashboard_manager, is_version_16
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import (
+    TAG_TABLE,
+    TICKET_FIELD as TAG_FIELD,
+    tags_enabled,
+    tags_since,
+)
+from helpdesk.utils import agent_only, is_dashboard_manager, is_version_16, xlsx_rows
 
 HD_TICKET = "HD Ticket"
 
@@ -1133,6 +1139,55 @@ def get_group_report_rows(
     )
 
 
+def tag_report_note() -> str:
+    # the same text as the Monthly Report screen (MonthlyReport.vue), so it is one translation
+    return _(
+        "Investigation tags count only tickets whose Investigation Status is Resolved, by the period the ticket was created. A ticket with several tags is counted under each tag."
+    )
+
+
+def get_group_tag_rows(period: str, from_date, to_date=None) -> list[dict[str, any]]:
+    """Resolved investigations per period (ticket creation, like get_group_report_rows) and tag."""
+    if not tags_enabled():
+        return []
+    fmt = "%%x-W%%v" if period == "weekly" else "%%Y-%%m"
+    conditions = "t.creation >= %(from_date)s AND t.investigation_status = 'Resolved'"
+    if to_date:
+        conditions += " AND t.creation < %(to_date)s"
+    # an untagged resolve from before tags went live never had the popup, so it isn't "without tags"
+    conditions += " AND (tt.tag IS NOT NULL OR t.investigation_resolved_on >= %(since)s)"
+    rows = frappe.db.sql(
+        f"""
+        SELECT DATE_FORMAT(t.creation, '{fmt}') AS month, tt.tag, COUNT(DISTINCT t.name) AS count
+        FROM `tabHD Ticket` t
+        LEFT JOIN `tab{TAG_TABLE}` tt
+            ON tt.parent = CAST(t.name AS CHAR) AND tt.parenttype = 'HD Ticket' AND tt.parentfield = '{TAG_FIELD}'
+        WHERE {conditions}
+        GROUP BY month, tt.tag
+        """,
+        # parent is text and ticket names are numbers: the CAST keeps the comparison on the parent index
+        {"from_date": from_date, "to_date": to_date, "since": tags_since()},
+        as_dict=True,
+    )
+    # newest period first; inside it the most used tags, then the untagged resolves
+    rows.sort(key=lambda r: (r.tag is None, -r.count, r.tag or ""))
+    rows.sort(key=lambda r: r.month, reverse=True)
+    return [
+        {"month": r.month, "tag": r.tag or _("Resolved without tags"), "count": int(r.count)}
+        for r in rows
+    ]
+
+
+def _group_report_window(months, period, weeks, from_date, to_date):
+    """(period, start, exclusive end or None): the last N months/weeks, or from_date..to_date inclusive."""
+    if from_date and to_date:
+        end = frappe.utils.add_days(frappe.utils.getdate(to_date), 1)
+        return period, frappe.utils.getdate(from_date), end
+    if period == "weekly":
+        return "weekly", frappe.utils.add_days(frappe.utils.nowdate(), -min(int(weeks), 104) * 7), None
+    return "monthly", frappe.utils.add_months(frappe.utils.nowdate(), -min(int(months), 36)), None
+
+
 @frappe.whitelist()
 @agent_only
 def get_monthly_group_report(
@@ -1147,18 +1202,26 @@ def get_monthly_group_report(
     by month. period="weekly": last `weeks` ISO weeks grouped by week.
     from_date and to_date (both inclusive) replace the "last N" window.
     """
-    if from_date and to_date:
-        to_date = frappe.utils.add_days(frappe.utils.getdate(to_date), 1)
-        return get_group_report_rows(period, frappe.utils.getdate(from_date), to_date)
+    return get_group_report_rows(*_group_report_window(months, period, weeks, from_date, to_date))
 
-    if period == "weekly":
-        weeks = min(int(weeks), 104)
-        from_date = frappe.utils.add_days(frappe.utils.nowdate(), -weeks * 7)
-        return get_group_report_rows("weekly", from_date)
 
-    months = min(int(months), 36)
-    from_date = frappe.utils.add_months(frappe.utils.nowdate(), -months)
-    return get_group_report_rows("monthly", from_date)
+@frappe.whitelist()
+@agent_only
+def get_monthly_tag_report(
+    months: int = 12,
+    period: str = "monthly",
+    weeks: int = 12,
+    from_date: str = None,
+    to_date: str = None,
+) -> list[dict[str, any]]:
+    """Investigation tag counts over the same window as get_monthly_group_report."""
+    return get_group_tag_rows(*_group_report_window(months, period, weeks, from_date, to_date))
+
+
+def tag_report_to_table(tag_rows: list[dict]) -> list[list]:
+    return [["Period", "Investigation tag", "Tickets"]] + [
+        [r["month"], r["tag"], r["count"]] for r in tag_rows
+    ]
 
 
 def group_report_to_table(rows: list[dict]) -> list[list]:
@@ -1173,33 +1236,52 @@ def group_report_to_table(rows: list[dict]) -> list[list]:
     return table
 
 
-def group_report_html(rows: list[dict], title: str) -> str:
-    table = group_report_to_table(rows)
-    head = "".join(f"<th style='text-align:left;padding:4px 8px'>{c}</th>" for c in table[0])
+def _html_table(table: list[list], empty: str) -> str:
+    esc = frappe.utils.escape_html
+    head = "".join(f"<th style='text-align:left;padding:4px 8px'>{esc(str(c))}</th>" for c in table[0])
     body = "".join(
-        "<tr>" + "".join(f"<td style='padding:4px 8px'>{c}</td>" for c in row) + "</tr>"
+        "<tr>" + "".join(f"<td style='padding:4px 8px' dir='auto'>{esc(str(c))}</td>" for c in row) + "</tr>"
         for row in table[1:]
-    ) or "<tr><td colspan='6' style='padding:4px 8px'>No tickets found for this period.</td></tr>"
+    ) or f"<tr><td colspan='{len(table[0])}' style='padding:4px 8px'>{empty}</td></tr>"
     return f"""
-        <h3>{title}</h3>
         <table border="1" style="border-collapse:collapse;font-size:13px">
             <thead><tr>{head}</tr></thead><tbody>{body}</tbody>
         </table>
     """
 
 
-def build_group_report_file(rows: list[dict], file_format: str, title: str):
+def group_report_html(rows: list[dict], title: str, tag_rows: list[dict] | None = None) -> str:
+    html = f"<h3>{title}</h3>" + _html_table(group_report_to_table(rows), "No tickets found for this period.")
+    if tag_rows:
+        html += f"<p style='margin:16px 0 4px'>{frappe.utils.escape_html(tag_report_note())}</p>" + _html_table(
+            tag_report_to_table(tag_rows), ""
+        )
+    return html
+
+
+def build_group_report_file(
+    rows: list[dict], file_format: str, title: str, tag_rows: list[dict] | None = None
+):
     """Returns (fname, fcontent) for 'PDF' or 'Excel'."""
     if file_format == "Excel":
         from frappe.utils.xlsxutils import make_xlsx
+        from openpyxl import Workbook
 
-        return (
-            "helpdesk-report.xlsx",
-            make_xlsx(group_report_to_table(rows), "Helpdesk Report").getvalue(),
-        )
+        wb = Workbook()
+        wb.remove(wb.active)
+        if tag_rows:
+            # a sheet of its own, so the first one stays the 6-column table it always was
+            make_xlsx(
+                xlsx_rows([*tag_report_to_table(tag_rows), [""], [tag_report_note()]]),
+                "Investigation Tags",
+                wb=wb,
+            )
+        # make_xlsx puts each new sheet first, so this one opens first
+        xlsx = make_xlsx(xlsx_rows(group_report_to_table(rows)), "Helpdesk Report", wb=wb)
+        return "helpdesk-report.xlsx", xlsx.getvalue()
     from frappe.utils.pdf import get_pdf
 
-    return "helpdesk-report.pdf", get_pdf(group_report_html(rows, title))
+    return "helpdesk-report.pdf", get_pdf(group_report_html(rows, title, tag_rows))
 
 
 @frappe.whitelist()
@@ -1212,13 +1294,13 @@ def download_group_report(
     from_date: str = None,
     to_date: str = None,
 ):
-    rows = get_monthly_group_report(
-        months=months, period=period, weeks=weeks, from_date=from_date, to_date=to_date
-    )
+    window = _group_report_window(months, period, weeks, from_date, to_date)
     title = f"Helpdesk Ticket Report ({period})"
     if from_date and to_date:
         title += f" {frappe.utils.getdate(from_date)} to {frappe.utils.getdate(to_date)}"
-    fname, fcontent = build_group_report_file(rows, file_format, title)
+    fname, fcontent = build_group_report_file(
+        get_group_report_rows(*window), file_format, title, get_group_tag_rows(*window)
+    )
     frappe.local.response.filename = fname
     frappe.local.response.filecontent = fcontent
     frappe.local.response.type = "download"

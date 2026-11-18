@@ -61,6 +61,14 @@
         No tickets found for this period.
       </div>
 
+      <p v-if="tagsByPeriod.size" class="text-sm text-gray-500">
+        {{
+          __(
+            "Investigation tags count only tickets whose Investigation Status is Resolved, by the period the ticket was created. A ticket with several tags is counted under each tag."
+          )
+        }}
+      </p>
+
       <div
         v-for="group in periodGroups"
         :key="group.period"
@@ -104,6 +112,20 @@
               {{ rate(row) }}%
             </span>
           </div>
+        </div>
+        <div
+          v-if="tagsByPeriod.get(group.period)"
+          class="flex flex-wrap items-center gap-1.5 border-t border-gray-100 px-4 py-2.5"
+        >
+          <span class="mr-1 text-sm text-gray-500">{{ __("Investigation tags") }}</span>
+          <span
+            v-for="row in tagsByPeriod.get(group.period)"
+            :key="row.tag"
+            class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-700"
+          >
+            <span dir="auto">{{ row.tag }}</span>
+            <span class="font-medium text-gray-900">{{ row.count }}</span>
+          </span>
         </div>
       </div>
     </div>
@@ -149,14 +171,31 @@ const report = createResource({
   auto: true,
 });
 
+const tagReport = createResource({
+  url: "helpdesk.api.dashboard.get_monthly_tag_report",
+  params: reportParams(),
+  auto: true,
+});
+
+const tagsByPeriod = computed(() => {
+  const byPeriod = new Map<string, { tag: string; count: number }[]>();
+  for (const row of tagReport.data || []) {
+    if (!byPeriod.has(row.month)) byPeriod.set(row.month, []);
+    byPeriod.get(row.month)!.push(row);
+  }
+  return byPeriod;
+});
+
 function reload() {
   if (waitingForRange.value) {
     // fetch once both dates are picked (the range watcher below)
     nextTick(() => datePickerRef.value?.open?.());
     return;
   }
-  report.update({ params: reportParams() });
-  report.reload();
+  for (const resource of [report, tagReport]) {
+    resource.update({ params: reportParams() });
+    resource.reload();
+  }
 }
 
 // clearing the picker emits "": keep the last report instead of reopening the calendar

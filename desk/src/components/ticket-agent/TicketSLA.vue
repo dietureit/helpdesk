@@ -74,6 +74,14 @@
           <span v-else class="text-ink-gray-4">{{ __("Unassigned") }}</span>
         </div>
       </template>
+      <!-- Investigation tags (edited in the Details tab) -->
+      <template v-if="investigationTags.length">
+        <div class="border-l border-outline-gray-2 h-[13px]" />
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="shrink-0">{{ __("Tags") }}</span>
+          <TagChips :tags="investigationTags" :max="2" class="!flex-nowrap" />
+        </div>
+      </template>
     </div>
   </teleport>
 </template>
@@ -87,6 +95,8 @@ import { Badge, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 import { useUserStore } from "@/stores/user";
 import MultipleAvatar from "../MultipleAvatar.vue";
+import TagChips from "../ticket/TagChips.vue";
+import { tagsOf } from "../ticket/ticketTags";
 
 const ticket = inject(TicketSymbol);
 const assignees = inject(AssigneeSymbol);
@@ -94,6 +104,7 @@ const { getUser } = useUserStore();
 const assigneeNames = computed(() =>
   (assignees.value?.data || []).map((a) => getUser(a.name).full_name).join(", ")
 );
+const investigationTags = computed(() => tagsOf(ticket.value?.doc?.investigation_tags));
 
 const resolutionBy = computed(() => {
   if (ticket.value?.get?.loading) return { label: "", color: "", date: "" };

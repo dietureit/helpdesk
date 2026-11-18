@@ -143,6 +143,7 @@ import { useRoute, useRouter } from "vue-router";
 import LucideMerge from "~icons/lucide/merge";
 import LucideLink from "~icons/lucide/link";
 import { IndicatorIcon } from "../icons";
+import { askForTags, queueTicketSave, tagsOf } from "../ticket/ticketTags";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSLA from "./TicketSLA.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
@@ -211,15 +212,25 @@ const investigationDropdown = computed(() => {
     label: o.label === "—" ? __("Clear") : o.label,
     value: o.value,
     onClick: () => {
+      // this ticket, not whichever one is open when the save returns (the next/previous arrows are right here)
+      const doc = ticket.value;
       const next = o.value;
-      const current = ticket.value.doc.investigation_status || "";
+      const current = doc.doc.investigation_status || "";
       if (current === next) return;
       notifyTicketUpdate("Investigation Status", next || "—");
-      ticket.value.setValue.submit(
+      queueTicketSave(
+        doc,
         { investigation_status: next },
         {
           onSuccess() {
             activities.value.reload();
+            // ask only after the Resolve saved, so the dialog can never block or undo it
+            if (next === "Resolved") {
+              askForTags(doc.doc.name, tagsOf(doc.doc.investigation_tags), () => {
+                doc.reload();
+                activities.value.reload();
+              });
+            }
           },
         }
       );

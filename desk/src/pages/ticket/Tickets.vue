@@ -124,6 +124,8 @@ import {
 import ExportModal from "@/components/ticket/ExportModal.vue";
 import TicketRowActions from "@/components/ticket/TicketRowActions.vue";
 import TicketCardViewSection from "@/components/ticket/TicketCardViewSection.vue";
+import { askForTags, tagsOf } from "@/components/ticket/ticketTags";
+import { __ } from "@/translation";
 import {
   PanelState,
   UNASSIGNED,
@@ -268,16 +270,20 @@ async function updateTicketField(ticketId: string, field: string, value: string)
       fieldname: field,
       value: value,
     });
-    toast.success("Updated successfully");
-    
+  } catch (error: any) {
+    toast.error(error.message || "Failed to update");
+    return false;
+  }
+  toast.success("Updated successfully");
+  // the save went through even if this refresh fails; the list catches up on its next load
+  try {
     if (viewMode.value === "card") {
       await cardViewResource.reload();
     } else {
       await listViewRef.value?.reload(false);
     }
-  } catch (error: any) {
-    toast.error(error.message || "Failed to update");
-  }
+  } catch {}
+  return true;
 }
 
 const defaultFilters = reactive<Record<string, any>>({});
@@ -717,8 +723,16 @@ function handleCardStatus(ticketId: string, value: string) {
   updateTicketField(ticketId, "status", value);
 }
 
-function handleCardInvestigationStatus(ticketId: string, value: string) {
-  updateTicketField(ticketId, "investigation_status", value);
+async function handleCardInvestigationStatus(ticketId: string, value: string) {
+  const rowOf = () =>
+    (cardViewResource.data?.data || []).find((r: any) => String(r.name) === String(ticketId));
+  if ((rowOf()?.investigation_status || "") === value) return;
+  const saved = await updateTicketField(ticketId, "investigation_status", value);
+  // ask only after the Resolve saved, so the dialog can never block or undo it; the row is the reloaded one,
+  // so the dialog starts from the ticket's current tags
+  if (saved && value === "Resolved" && !isCustomerPortal.value) {
+    askForTags(ticketId, tagsOf(rowOf()?.investigation_tags), () => cardViewResource.reload());
+  }
 }
 
 function handleCardPriority(ticketId: string, value: string) {
@@ -795,6 +809,11 @@ const filterOptions = computed(() => {
     assigned_to: [{ label: "Unassigned", value: UNASSIGNED }, ...agents],
     owner: [{ label: "Administrator", value: "Administrator" }, ...agents],
     internal_sla_tier: (filterMeta.data?.tiers || []).map((t: string) => ({ label: t, value: t })),
+    // disabled tags too: tickets keep them and reports still count them
+    investigation_tags: (filterMeta.data?.tags || []).map((t: { name: string; enabled: number }) => ({
+      label: t.enabled ? t.name : `${t.name} (${__("Disabled")})`,
+      value: t.name,
+    })),
   };
 });
 

@@ -2,9 +2,11 @@
   <Layout class="isolate">
     <router-view class="flex flex-1 flex-col overflow-auto" />
   </Layout>
+  <TicketTagsDialog />
 </template>
 
 <script setup lang="ts">
+import TicketTagsDialog from "@/components/ticket/TicketTagsDialog.vue";
 import { useAuthStore } from "@/stores/auth";
 import { computed, defineAsyncComponent, onBeforeMount } from "vue";
 import { useRouter } from "vue-router";

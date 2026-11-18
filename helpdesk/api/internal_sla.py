@@ -12,6 +12,11 @@ from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings
 from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings import (
     get_settings as get_settings_doc,
 )
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import (
+    TICKET_FIELD as TAG_FIELD,
+    tag_options,
+    tags_by_ticket,
+)
 from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
 
 EDITABLE_FIELDS = (
@@ -49,6 +54,7 @@ def get_options():
         "enabled": settings.enabled,
         "tiers": [tier.tier for tier in settings.tiers],
         "categories": get_categories(),
+        "tags": tag_options(),
     }
 
 
@@ -84,8 +90,10 @@ REPORT_COLUMNS = (
     ("overdue_by", "Overdue By"),
     ("status", "Ticket Status"),
     ("internal_sla_status", "SLA Status"),
+    (TAG_FIELD, "Investigation Tags"),
 )
 COMPUTED_COLUMNS = {"name", "_assign", "overdue_by"}
+QUERY_SKIP = {"overdue_by", TAG_FIELD}  # filled after the query
 REPORT_PAGE_ROWS = 500
 
 
@@ -114,13 +122,15 @@ def breach_report(filters, limit):
     rows = frappe.get_list(
         "HD Ticket",
         filters=conditions,
-        fields=[f for f, _label in columns if f != "overdue_by"],
+        fields=[f for f, _label in columns if f not in QUERY_SKIP],
         order_by="internal_sla_due_by asc, name desc",
         limit_page_length=limit,
     )
     now = now_datetime()
+    tags = tags_by_ticket([row.name for row in rows])
     for row in rows:
         row["_assign"] = ", ".join(json.loads(row.get("_assign") or "[]"))
+        row[TAG_FIELD] = ", ".join(tags.get(row.name, []))
         end = get_datetime(row.investigation_resolved_on) if row.investigation_resolved_on else now
         row["overdue_by"] = (
             overdue_text(end - get_datetime(row.internal_sla_due_by)) if row.internal_sla_due_by else ""

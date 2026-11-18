@@ -4,6 +4,7 @@ import EmailConfig from "./EmailConfig.vue";
 import TeamsConfig from "./Teams/TeamsConfig.vue";
 import TicketTypeSettings from "./TicketTypes/TicketTypeSettings.vue";
 import MessengerCategories from "./MessengerCategories/MessengerCategories.vue";
+import TicketTags from "./TicketTags/TicketTags.vue";
 import Sla from "./Sla/Sla.vue";
 import InternalSla from "./InternalSla/InternalSla.vue";
 import HolidayList from "./Holiday/Holiday.vue";
@@ -18,6 +19,7 @@ import ShieldCheck from "~icons/lucide/shield-check";
 import Briefcase from "~icons/lucide/briefcase";
 import LucideTimer from "~icons/lucide/timer";
 import LucideTags from "~icons/lucide/tags";
+import LucideTag from "~icons/lucide/tag";
 import LucideList from "~icons/lucide/list";
 import AssignmentRules from "./Assignment Rules/AssignmentRules.vue";
 import Settings from "~icons/lucide/settings-2";
@@ -106,6 +108,12 @@ export const tabs = computed(() => {
           icon: markRaw(LucideList),
           component: markRaw(MessengerCategories),
           condition: () => auth.isAdmin,
+        },
+        {
+          label: __("Ticket Tags"),
+          icon: markRaw(LucideTag),
+          component: markRaw(TicketTags),
+          condition: () => auth.isAdmin || auth.isManager,
         },
         {
           label: __("SLA Policies"),

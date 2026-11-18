@@ -35,6 +35,8 @@ export const FILTERS: FilterDef[] = [
     agentOnly: true,
     options: toOptions(["Open", "Resolved"]),
   },
+  // exact match on the ticket's tags, done by the server (build_card_filters)
+  { key: "investigation_tags", label: "Investigation Tag", agentOnly: true },
   { key: "priority", label: "Priority" },
   { key: "agent_group", label: "Team", agentOnly: true },
   { key: "assigned_to", label: "Assigned To", agentOnly: true },

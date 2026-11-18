@@ -36,6 +36,7 @@
   "internal_sla_section",
   "investigation_status",
   "investigation_resolved_on",
+  "investigation_tags",
   "internal_sla_tier",
   "internal_sla_column",
   "internal_sla_status",
@@ -251,6 +252,14 @@
    "label": "Investigation Resolved On",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "description": "What the investigation found. Agents pick them on the ticket; the list is managed in Settings > Ticket Tags.",
+   "fieldname": "investigation_tags",
+   "fieldtype": "Table MultiSelect",
+   "label": "Investigation Tags",
+   "no_copy": 1,
+   "options": "HD Ticket Investigation Tag"
   },
   {
    "fieldname": "internal_sla_tier",
@@ -516,7 +525,7 @@
  "icon": "fa fa-issue",
  "idx": 61,
  "links": [],
- "modified": "2026-10-28 20:00:00.000000",
+ "modified": "2026-11-18 23:30:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Ticket",

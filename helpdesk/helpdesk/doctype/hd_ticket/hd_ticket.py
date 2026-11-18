@@ -95,6 +95,41 @@ class HDTicket(Document):
     def validate(self):
         self.validate_feedback()
         self.validate_sub_type()
+        self.validate_investigation_tags()
+
+    def validate_investigation_tags(self):
+        """Only agents tag, and only saved tickets: split tickets deep-copy their parent and portal input isn't trusted.
+        A newly added tag must be enabled; a tag the ticket already has stays after it is disabled."""
+        if not self.meta.has_field("investigation_tags"):  # code deployed before migrate
+            return
+        if self.is_new():
+            self.set("investigation_tags", [])
+            return
+        old = self.get_doc_before_save()
+        if not is_agent():
+            # the stored rows exactly, names included: a sent row name could otherwise move another ticket's row here
+            self.set("investigation_tags", old.get("investigation_tags") if old else [])
+            return
+        old_tags = [row.tag for row in old.get("investigation_tags") or []] if old else []
+        tags = list(dict.fromkeys(row.tag for row in self.get("investigation_tags") or [] if row.tag))
+        if added := [tag for tag in tags if tag not in old_tags]:
+            disabled = frappe.get_all(
+                "HD Ticket Tag", filters={"name": ["in", added], "enabled": 0}, pluck="name"
+            )
+            if len(disabled) == 1:
+                frappe.throw(
+                    _(
+                        "Tag {0} is disabled and can't be added. Remove it, or ask an admin to enable it in Settings > Ticket Tags."
+                    ).format(frappe.bold(disabled[0]))
+                )
+            if disabled:
+                frappe.throw(
+                    _(
+                        "Tags {0} are disabled and can't be added. Remove them, or ask an admin to enable them in Settings > Ticket Tags."
+                    ).format(frappe.bold(", ".join(disabled)))
+                )
+        if tags != [row.tag for row in self.get("investigation_tags") or []]:
+            self.set("investigation_tags", [{"tag": tag} for tag in tags])
 
     def before_save(self):
         self.apply_sla()
@@ -488,6 +523,22 @@ class HDTicket(Document):
                     log_ticket_activity(
                         self.name, f"set {field_maps[field]} to {value}"
                     )
+        self.log_investigation_tag_changes()
+
+    def log_investigation_tag_changes(self):
+        old = self.get_doc_before_save()
+        if not old or not self.meta.has_field("investigation_tags"):
+            return
+        before = [row.tag for row in old.get("investigation_tags") or []]
+        after = [row.tag for row in self.get("investigation_tags") or []]
+        for verb, tags in (
+            ("added", [tag for tag in after if tag not in before]),
+            ("removed", [tag for tag in before if tag not in after]),
+        ):
+            if tags:
+                # HD Ticket Activity.action holds 140 characters; a longer value would fail the ticket save
+                action = f"{verb} tag{'s' if len(tags) > 1 else ''} {', '.join(tags)}"
+                log_ticket_activity(self.name, action if len(action) <= 140 else action[:139] + "…")
 
     def generate_key(self):
         self.key = uuid.uuid4()
