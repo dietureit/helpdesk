@@ -32,6 +32,7 @@ def after_install():
     add_property_setters()
     add_website_settings_permission()
     add_internal_sla_defaults()
+    add_default_ticket_tags()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 
@@ -65,6 +66,13 @@ INTERNAL_SLA_TIERS = [
     ("Tier 2 - Standard", 2, "Days"),
     ("Tier 3 - Systemic", 4, "Days"),
 ]
+
+
+def add_default_ticket_tags():
+    # only into an empty list: once an admin has tags, they own the list
+    if frappe.db.count("HD Ticket Tag"):
+        return
+    frappe.get_doc({"doctype": "HD Ticket Tag", "tag": "Personal Preferences"}).insert(ignore_permissions=True)
 
 
 def add_internal_sla_defaults():

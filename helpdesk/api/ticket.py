@@ -5,6 +5,11 @@ from frappe import _
 from frappe.utils import get_timespan_date_range, now_datetime, nowdate
 from frappe.utils.xlsxutils import make_xlsx
 
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import (
+    TICKET_FIELD as TAG_FIELD,
+    tags_by_ticket,
+    tickets_with_tag,
+)
 from helpdesk.utils import agent_only, is_agent, xlsx_rows
 
 
@@ -61,7 +66,16 @@ def build_card_filters(raw_filters, agent):
         # customer SLA: still open and past the resolution due time
         open_statuses = frappe.get_all("HD Ticket Status", filters={"category": "Open"}, pluck="name")
         filters += [["status", "in", open_statuses or ["Open"]], ["resolution_by", "<", now_datetime()]]
+    tag = raw_filters.get(TAG_FIELD) if agent else None
+    if tag:
+        # Tags live in a child table: match exact names. A filter we can't read matches nothing, never everything.
+        if isinstance(tag, (list, tuple)):
+            tag = tag[1] if len(tag) == 2 and str(tag[0]) == "=" else None
+        names = tickets_with_tag(tag) if isinstance(tag, str) and tag else []
+        filters.append(["name", "in", names or [""]])
     for field, value in raw_filters.items():
+        if field == TAG_FIELD:
+            continue
         if field not in STANDARD_FILTER_FIELDS and not meta.has_field(field):
             continue
         if not agent and field not in CUSTOMER_FILTER_FIELDS:
@@ -132,6 +146,7 @@ EXPORT_COLUMNS = (
     ("internal_sla_status", "Internal SLA Status"),
     ("internal_sla_due_by", "Internal SLA Due By"),
     ("investigation_resolved_on", "Investigation Resolved On"),
+    (TAG_FIELD, "Investigation Tags"),  # child table: filled after the query
 )
 
 
@@ -150,13 +165,15 @@ def export_tickets(filters=None):
         "HD Ticket",
         filters=build_card_filters(filters, True),
         or_filters=build_search_filters(filters),
-        fields=[field for field, _label in columns],
+        fields=[field for field, _label in columns if field != TAG_FIELD],
         order_by="name desc",
         limit_page_length=0,
     )
+    tags = tags_by_ticket([ticket.name for ticket in tickets])
     rows = [[_(label) for _field, label in columns]]
     for ticket in tickets:
         ticket["_assign"] = ", ".join(json.loads(ticket.get("_assign") or "[]"))
+        ticket[TAG_FIELD] = ", ".join(tags.get(ticket.name, []))
         rows.append([ticket.get(field) for field, _label in columns])
 
     frappe.local.response.filename = f"tickets-{nowdate()}.xlsx"
@@ -173,7 +190,8 @@ def get_tickets_for_card_view(
 ):
     """Tickets for the card view. `filters` is {field: value | [operator, operand]}, plus `search` and `overdue`."""
     filters = frappe.parse_json(filters) if filters else {}
-    parsed_filters = build_card_filters(filters, is_agent())
+    agent = is_agent()
+    parsed_filters = build_card_filters(filters, agent)
     or_filters = build_search_filters(filters)
 
     # Default to ticket id based ordering so permission queries still apply.
@@ -209,6 +227,10 @@ def get_tickets_for_card_view(
         order_by=order_by_value,
         as_list=False,
     )
+    if agent:  # the customer portal shares this endpoint; tags are internal findings
+        tags = tags_by_ticket([ticket.name for ticket in tickets])
+        for ticket in tickets:
+            ticket[TAG_FIELD] = tags.get(ticket.name, [])
 
     # Permission-aware count using get_list to ensure user permissions are applied
     total_count_result = frappe.get_list(

@@ -88,6 +88,7 @@ has_permission = {
 
 permission_query_conditions = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.permission_query",
+    "HD Ticket Investigation Tag": "helpdesk.helpdesk.doctype.hd_ticket_investigation_tag.hd_ticket_investigation_tag.permission_query",
 }
 
 # DocType Class

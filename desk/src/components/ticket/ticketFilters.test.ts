@@ -65,6 +65,15 @@ describe("fromRouteFilters", () => {
     });
   });
 
+  it("round-trips the investigation tag filter, Arabic included", () => {
+    const api = toApiFilters({ investigation_tags: "لا توجد مشكلة" });
+    expect(api).toEqual({ investigation_tags: ["=", "لا توجد مشكلة"] });
+    expect(fromRouteFilters(api)).toEqual({
+      state: { investigation_tags: "لا توجد مشكلة" },
+      leftovers: {},
+    });
+  });
+
   it("keeps filters the panel cannot show", () => {
     const overdueCard = {
       status: ["in", ["Open", "Replied"]],

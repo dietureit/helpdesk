@@ -127,6 +127,34 @@
         </table>
       </div>
 
+      <div v-if="byTag.length" class="space-y-2">
+        <h2 class="text-base font-semibold text-gray-900">
+          {{ __("Investigation tags") }}
+          <span class="text-sm font-normal text-gray-500">{{ report.data?.tag_note }}</span>
+        </h2>
+        <div class="overflow-x-auto bg-white border border-gray-200 rounded-lg max-w-xl">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-gray-500 border-b border-gray-200">
+                <th v-for="col in tagColumns" :key="col.key" class="px-3 py-2 font-medium">
+                  {{ col.label }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in byTag"
+                :key="row.tag"
+                class="border-b border-gray-100 last:border-b-0"
+              >
+                <td class="px-3 py-2 text-gray-700" dir="auto">{{ row.tag }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ row.count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div v-for="section in detailSections" :key="section.type" class="space-y-2">
         <h2 class="text-base font-semibold text-gray-900">
           {{ section.type }}
@@ -287,6 +315,14 @@ const EMPTY_SUMMARY = {
 const summary = computed(() => report.data?.summary || EMPTY_SUMMARY);
 const byType = computed(() => report.data?.by_type || []);
 const totals = computed(() => report.data?.totals || null);
+const byTag = computed<{ tag: string; count: number }[]>(() => report.data?.by_tag || []);
+const tagColumns = computed(
+  () =>
+    report.data?.columns?.tags || [
+      { key: "tag", label: "Investigation Tag" },
+      { key: "count", label: "Tickets" },
+    ]
+);
 const summaryColumns = computed(
   () =>
     report.data?.columns?.summary || [

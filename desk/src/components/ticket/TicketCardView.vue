@@ -145,6 +145,8 @@
                 <LucideUsers class="h-3.5 w-3.5 text-ink-gray-6" />
                 <span class="truncate">Team: {{ teamName(ticket) }}</span>
               </div>
+              <!-- only agents receive investigation_tags from the card API -->
+              <TagChips :tags="tagsOf(ticket.investigation_tags)" :max="3" />
             </div>
           </div>
         </div>
@@ -164,6 +166,8 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideClock3 from "~icons/lucide/clock-3";
 import LucideUser from "~icons/lucide/user";
 import LucideUsers from "~icons/lucide/users";
+import TagChips from "./TagChips.vue";
+import { tagsOf } from "./ticketTags";
 
 const props = withDefaults(
   defineProps<{

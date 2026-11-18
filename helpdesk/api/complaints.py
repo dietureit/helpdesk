@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, timedelta
 from io import BytesIO
 
@@ -22,7 +22,10 @@ from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.marker import DataPoint
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import tags_by_ticket, tags_since
 from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
+
+TAG_COLUMNS = (("tag", "Investigation Tag"), ("count", "Tickets"))
 
 DETAIL_COLUMNS = (
     ("date", "Date"),
@@ -37,6 +40,7 @@ DETAIL_COLUMNS = (
     ("department_reason", "Reason given by department"),
     ("investigation", "Investigation"),
     ("investigation_sla", "Investigation SLA"),
+    ("tags", "Investigation Tags"),
 )
 
 SUMMARY_COLUMNS = (
@@ -222,6 +226,7 @@ def _select_fields(alias: str = "t") -> str:
         "custom_solution",
         "custom_category",
         "investigation_status",
+        "investigation_resolved_on",
         "internal_sla_status",
     ):
         if _has_field(field):
@@ -297,7 +302,9 @@ def _is_resolved(status: str, resolved: set[str]) -> bool:
     return (status or "") in resolved
 
 
-def _row_from_ticket(ticket: dict, comments: dict[str, str], resolved: set[str]) -> dict:
+def _row_from_ticket(
+    ticket: dict, comments: dict[str, str], resolved: set[str], tags: list[str] | None = None
+) -> dict:
     name = str(ticket.name)
     reason = comments.get(name, "")
     investigation = "Submitted" if reason else "Pending"
@@ -331,8 +338,29 @@ def _row_from_ticket(ticket: dict, comments: dict[str, str], resolved: set[str])
         "agent_group": ticket.get("agent_group") or "",
         "status": ticket.get("status") or "",
         "investigation_status": inv_status or "",
+        "investigation_resolved_on": ticket.get("investigation_resolved_on"),
         "is_resolved": 1 if _is_resolved(ticket.get("status"), resolved) else 0,
+        "tags": ", ".join(tags or []),
+        "tag_list": tags or [],
     }
+
+
+def tag_counts(rows: list[dict], since=None) -> list[dict]:
+    """Tickets per tag over resolved investigations, then how many were resolved without one. Only
+    investigations resolved since tags went live (`since`) count as untagged: earlier ones never had the popup."""
+    counts: Counter = Counter()
+    untagged = 0
+    for row in rows:
+        if row["investigation_status"] != "Resolved":
+            continue
+        if row["tag_list"]:
+            counts.update(row["tag_list"])
+        elif since and row.get("investigation_resolved_on") and row["investigation_resolved_on"] >= since:
+            untagged += 1
+    out = [{"tag": tag, "count": n} for tag, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    if untagged:
+        out.append({"tag": _("Resolved without tags"), "count": untagged})
+    return out
 
 
 def build_complaints_report(filters: dict | None = None) -> dict:
@@ -351,7 +379,8 @@ def build_complaints_report(filters: dict | None = None) -> dict:
     recent_from, recent_to, recent_weeks = _recent_bounds(filters["to_date"])
     recent_counts = _counts_by_type(filters, recent_from, recent_to)
 
-    rows = [_row_from_ticket(t, comments, resolved) for t in tickets]
+    tags = tags_by_ticket([t.name for t in tickets])
+    rows = [_row_from_ticket(t, comments, resolved, tags.get(t.name)) for t in tickets]
     rows_by_type: dict[str, list] = defaultdict(list)
     for row in rows:
         rows_by_type[row["ticket_type"]].append(row)
@@ -436,11 +465,16 @@ def build_complaints_report(filters: dict | None = None) -> dict:
         },
         "by_type": by_type,
         "totals": total,
+        "by_tag": tag_counts(rows, tags_since()),
+        "tag_note": _(
+            "Counts only tickets whose Investigation Status is Resolved. A ticket with several tags is counted under each tag."
+        ),
         "rows_by_type": dict(rows_by_type),
         "charts": {"donut": donut, "axis": axis},
         "columns": {
             "detail": [{"key": k, "label": _(v)} for k, v in DETAIL_COLUMNS],
             "summary": [{"key": k, "label": _(v)} for k, v in SUMMARY_COLUMNS],
+            "tags": [{"key": k, "label": _(v)} for k, v in TAG_COLUMNS],
         },
     }
 
@@ -634,6 +668,19 @@ def _report_to_html(report: dict) -> str:
             for row in [*report["by_type"], report["totals"]]
         ],
     )
+    tag_table = (
+        f"<div class='section'><h2>{_esc(_('Investigation tags'))} <span>{_esc(report.get('tag_note'))}</span></h2>"
+        + _html_table(
+            TAG_COLUMNS,
+            [
+                f"<tr><td dir='auto'>{_esc(row['tag'])}</td><td>{row['count']}</td></tr>"
+                for row in report["by_tag"]
+            ],
+        )
+        + "</div>"
+        if report.get("by_tag")
+        else ""
+    )
     rows_by_type = report["rows_by_type"]
     sections = (
         "".join(
@@ -659,6 +706,7 @@ def _report_to_html(report: dict) -> str:
         {tiles}
         {chart_row}
         {summary}
+        {tag_table}
         {sections}
     </body></html>"""
 
@@ -717,7 +765,20 @@ def _report_to_xlsx(report: dict) -> bytes:
         ws.cell(6, col).font = Font(size=9, color="9CA3AF")
     for cell in (*ws[header], *ws[ws.max_row]):
         cell.font, cell.fill = bold, fill
+    tag_top = ws.max_row + 2  # leaves one empty row under the department table
+    if report.get("by_tag"):
+        ws.cell(tag_top, 1, _("Investigation tags")).font = bold
+        for col, (_key, label) in enumerate(TAG_COLUMNS, 1):
+            cell = ws.cell(tag_top + 1, col, _(label))
+            cell.font, cell.fill = bold, fill
+        tag_rows = xlsx_rows([[row["tag"], row["count"]] for row in report["by_tag"]])
+        for i, row in enumerate(tag_rows, tag_top + 2):
+            for col, value in enumerate(row, 1):
+                ws.cell(i, col, value)
     _fit_columns(ws, min_row=4)
+    if report.get("by_tag"):
+        # written after the widths are set, so the long note overflows instead of widening column B
+        ws.cell(tag_top, 2, report.get("tag_note")).font = muted
 
     # by_type is sorted by raised desc, so the departments the charts show are its first rows
     n = sum(1 for row in report["by_type"] if row["raised"])
@@ -771,14 +832,18 @@ def _report_to_xlsx(report: dict) -> bytes:
         ws.add_chart(bars, f"D{anchor}")
 
     ts = wb.create_sheet(_("Tickets"))
+    # tags after Team, so the columns this sheet already had keep their places
+    detail = [(key, label) for key, label in DETAIL_COLUMNS if key != "tags"]
     rows = [
-        [_("Department")] + [_(label) for _key, label in DETAIL_COLUMNS] + [_("Team")]
+        [_("Department")]
+        + [_(label) for _key, label in detail]
+        + [_("Team"), _("Investigation Tags")]
     ]
     for ticket_type in sorted(report["rows_by_type"]):
         rows += [
             [ticket_type]
-            + [_xlsx_detail(key, row) for key, _label in DETAIL_COLUMNS]
-            + [row.get("agent_group")]
+            + [_xlsx_detail(key, row) for key, _label in detail]
+            + [row.get("agent_group"), row.get("tags")]
             for row in report["rows_by_type"][ticket_type]
         ]
     for row in xlsx_rows(rows):

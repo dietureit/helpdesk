@@ -10,6 +10,7 @@ from frappe.utils import get_time, getdate, now_datetime, validate_email_address
 from helpdesk.api.dashboard import (
     build_group_report_file,
     get_group_report_rows,
+    get_group_tag_rows,
     group_report_html,
 )
 
@@ -47,11 +48,12 @@ class HDReportSchedule(Document):
         from_date, to_date, label = self.report_period(now.date())
         period = "weekly" if self.frequency == "Weekly" else "monthly"
         rows = get_group_report_rows(period, from_date, to_date)
+        tag_rows = get_group_tag_rows(period, from_date, to_date)
         title = f"Helpdesk Ticket Report — {label}"
 
         formats = ["PDF", "Excel"] if self.attach_format == "Both" else [self.attach_format]
         attachments = [
-            dict(zip(("fname", "fcontent"), build_group_report_file(rows, f, title)))
+            dict(zip(("fname", "fcontent"), build_group_report_file(rows, f, title, tag_rows)))
             for f in formats
         ]
 
@@ -59,7 +61,7 @@ class HDReportSchedule(Document):
             recipients=split_emails(self.recipients),
             cc=split_emails(self.cc),
             subject=title,
-            message=group_report_html(rows, title),
+            message=group_report_html(rows, title, tag_rows),
             attachments=attachments,
         )
         self.db_set("last_sent_at", now)

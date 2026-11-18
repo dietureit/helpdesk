@@ -80,6 +80,19 @@
                 (val: string) => handleFieldUpdate('investigation_status', val, true)
               "
             />
+            <div v-if="field.fieldname === 'status'" class="mt-3 flex flex-col gap-1.5">
+              <span class="form-control-label text-xs">{{ __("Investigation Tags") }}</span>
+              <!-- keyed by ticket: moving to another ticket drops an open draft instead of saving it there -->
+              <TagMultiSelect
+                :key="ticket.doc?.name"
+                :model-value="investigationTags"
+                :options="internalSlaOptions.data?.tags || []"
+                :label="__('Investigation Tags')"
+                :placeholder="__('Select tags')"
+                @open="internalSlaOptions.reload()"
+                @change="saveInvestigationTags"
+              />
+            </div>
             <FormControl
               v-if="field.fieldname === 'agent_group' && showTierPicker"
               type="select"
@@ -151,6 +164,8 @@ import {
 import { computed, inject, ref, watch } from "vue";
 import { createResource, FormControl } from "frappe-ui";
 import TicketField from "../TicketField.vue";
+import TagMultiSelect from "../ticket/TagMultiSelect.vue";
+import { askForTags, queueTicketSave, tagsOf } from "../ticket/ticketTags";
 import AssignTo from "./AssignTo.vue";
 import TicketContact from "./TicketContact.vue";
 
@@ -213,6 +228,30 @@ const showTierPicker = computed(
 
 // frappe-ui's select drops options with an empty value
 const NONE = "__none__";
+
+const investigationTags = computed(() => tagsOf(ticket.value.doc?.investigation_tags));
+
+function saveInvestigationTags(tags: string[]) {
+  queueTicketSave(
+    ticket.value,
+    { investigation_tags: tags.map((tag) => ({ tag })) },
+    {
+      onSuccess: () => {
+        // untranslated, like the other fields: each viewer's toast translates it
+        notifyTicketUpdate("Investigation Tags", tags.join(", ") || "—");
+        activities.value.reload();
+      },
+    }
+  );
+}
+
+// `doc` is the ticket the Resolve was saved on: by the time the save returns the agent may be on another ticket
+function askTagsAfterResolve(doc: typeof ticket.value) {
+  askForTags(doc.doc.name, tagsOf(doc.doc.investigation_tags), () => {
+    doc.reload();
+    activities.value.reload();
+  });
+}
 
 const tierOptions = computed(() => {
   const tiers: string[] = [...(internalSlaOptions.data?.tiers || [])];
@@ -458,13 +497,19 @@ function handleFieldUpdate(
   }
   const values: Record<string, FieldValue> = { [fieldname]: value };
   if (fieldname === "custom_category") values.custom_sub_category = ""; // a sub category belongs to one category
-  ticket.value.setValue.submit(
+  const doc = ticket.value;
+  queueTicketSave(
+    doc,
     values,
     {
       onSuccess: () => {
         // TODO: emit the event for notification to listeners
         if (fieldname === "agent_group") {
           assignees.value.reload();
+        }
+        // ask only after the Resolve saved, so the dialog can never block or undo it
+        if (fieldname === "investigation_status" && value === "Resolved") {
+          askTagsAfterResolve(doc);
         }
         // Reload activities after a short delay to ensure backend has created the activity log
         // The helpdesk:ticket-update event (emitted with after_commit=True) will also trigger a reload
