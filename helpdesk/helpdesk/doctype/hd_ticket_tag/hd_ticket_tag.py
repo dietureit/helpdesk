@@ -2,16 +2,40 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint
 
 # HD Ticket's Table MultiSelect field and its child table
 TICKET_FIELD = "investigation_tags"
 TAG_TABLE = "HD Ticket Investigation Tag"
+# HD Ticket Tag's Table MultiSelect field and its child table: the ticket types a tag is offered on
+TYPES_FIELD = "ticket_types"
+TYPE_TABLE = "HD Ticket Tag Ticket Type"
 
 
 class HDTicketTag(Document):
-    pass
+    def validate(self):
+        # The Desk picker lists only enabled types, but a type name typed in full skips that filter. A type disabled
+        # after it was linked stays linked: its existing tickets can still be investigated.
+        old = self.get_doc_before_save()
+        linked = {row.ticket_type for row in old.get(TYPES_FIELD) or []} if old else set()
+        added = {row.ticket_type for row in self.get(TYPES_FIELD) or []} - linked
+        if added and (
+            disabled := frappe.get_all(
+                "HD Ticket Type", filters={"name": ["in", list(added)], "enabled": 0}, pluck="name"
+            )
+        ):
+            frappe.throw(_("Disabled ticket types can't be linked: {0}").format(frappe.bold(", ".join(disabled))))
+
+    def on_update(self):
+        # open agent pages refetch the tag list, which decides where the popup and the Details field show
+        frappe.publish_realtime("helpdesk:ticket-tags-updated", after_commit=True)
+
+    after_delete = on_update
+
+    def after_rename(self, old, new, merge=False):
+        self.on_update()
 
 
 def tags_enabled() -> bool:
@@ -19,11 +43,53 @@ def tags_enabled() -> bool:
     return frappe.get_meta("HD Ticket").has_field(TICKET_FIELD)
 
 
+def types_enabled() -> bool:
+    """False between a code deploy and the migrate that adds HD Ticket Tag's ticket types."""
+    return frappe.get_meta("HD Ticket Tag").has_field(TYPES_FIELD)
+
+
 def tag_options() -> list[dict]:
-    """Every tag, disabled ones included: tickets keep them and filters/reports still need them."""
+    """Every tag, disabled ones included: tickets keep them and filters/reports still need them.
+    `ticket_types`: the types a tag is offered on. A tag without types is offered on no ticket."""
     if not tags_enabled():
         return []
-    return frappe.get_all("HD Ticket Tag", fields=["name", "enabled"], order_by="creation asc")
+    tags = frappe.get_all("HD Ticket Tag", fields=["name", "enabled"], order_by="creation asc")
+    types: dict = {}
+    if types_enabled():
+        for row in frappe.get_all(
+            TYPE_TABLE,
+            filters={"parenttype": "HD Ticket Tag", "parentfield": TYPES_FIELD},
+            fields=["parent", "ticket_type"],
+            order_by="idx asc",
+        ):
+            types.setdefault(row.parent, []).append(row.ticket_type)
+    for tag in tags:
+        tag["ticket_types"] = types.get(tag.name, [])
+    return tags
+
+
+def tagged_types() -> set[str]:
+    """Ticket types with at least one enabled tag: only their tickets get the tag popup and the Details field."""
+    return {ticket_type for tag in tag_options() if tag.enabled for ticket_type in tag.ticket_types}
+
+
+def tags_offered_on(ticket_type: str, tags: list[str]) -> set[str]:
+    """Which of `tags` are linked to `ticket_type`. All of them before the migrate that adds ticket types, so ticket
+    saves keep working in between."""
+    if not types_enabled():
+        return set(tags)
+    return set(
+        frappe.get_all(
+            TYPE_TABLE,
+            filters={
+                "parenttype": "HD Ticket Tag",
+                "parentfield": TYPES_FIELD,
+                "parent": ["in", tags],
+                "ticket_type": ticket_type or "",
+            },
+            pluck="parent",
+        )
+    )
 
 
 def tags_since():
@@ -77,15 +143,43 @@ def get_tags():
     return tag_options()
 
 
-@frappe.whitelist()
-def add_tag(tag: str):
-    _check_manager()
-    frappe.get_doc({"doctype": "HD Ticket Tag", "tag": tag}).insert(ignore_permissions=True)
+def _type_rows(ticket_types: list[str] | None) -> list[dict]:
+    return [{"ticket_type": ticket_type} for ticket_type in dict.fromkeys(ticket_types or [])]
 
 
 @frappe.whitelist()
-def set_tag_enabled(tag: str, enabled: int):
+def save_tags(tags: list[dict]):
+    """Save the Settings > Ticket Tags form: new tags, ticket types and the Enabled switches. It runs in one
+    request, and so in one transaction: a refused row saves nothing.
+    A new tag is {name, is_new: 1, enabled, ticket_types}. An existing one is {name} plus only the fields the form
+    changed (`enabled`, `ticket_types`), so another admin's edit to the other field survives."""
     _check_manager()
-    doc = frappe.get_doc("HD Ticket Tag", tag)
-    doc.enabled = cint(enabled)
-    doc.save(ignore_permissions=True)
+    for row in tags:
+        if row.get("is_new"):
+            # ticket types are mandatory (the field is reqd): no types, no tag
+            frappe.get_doc(
+                {
+                    "doctype": "HD Ticket Tag",
+                    "tag": row.get("name"),
+                    "enabled": cint(row.get("enabled", 1)),
+                    TYPES_FIELD: _type_rows(row.get("ticket_types")),
+                }
+            ).insert(ignore_permissions=True)
+            continue
+        doc = frappe.get_doc("HD Ticket Tag", row.get("name"))
+        enabled_changed = "enabled" in row and cint(row["enabled"]) != cint(doc.enabled)
+        types = _type_rows(row["ticket_types"]) if "ticket_types" in row else None
+        types_changed = types is not None and [r.ticket_type for r in doc.get(TYPES_FIELD)] != [
+            r["ticket_type"] for r in types
+        ]
+        if not (enabled_changed or types_changed):
+            continue
+        if enabled_changed:
+            doc.enabled = cint(row["enabled"])
+        if types_changed:
+            doc.set(TYPES_FIELD, types)
+        else:
+            # only the switch changed: a tag from before types were mandatory (or the starter tag) can still be
+            # switched on and off
+            doc.flags.ignore_mandatory = True
+        doc.save(ignore_permissions=True)

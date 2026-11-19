@@ -22,7 +22,7 @@ from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.marker import DataPoint
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import tags_by_ticket, tags_since
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import tagged_types, tags_by_ticket, tags_since
 from helpdesk.utils import agent_only, is_dashboard_manager, xlsx_rows
 
 TAG_COLUMNS = (("tag", "Investigation Tag"), ("count", "Tickets"))
@@ -345,9 +345,9 @@ def _row_from_ticket(
     }
 
 
-def tag_counts(rows: list[dict], since=None) -> list[dict]:
-    """Tickets per tag over resolved investigations, then how many were resolved without one. Only
-    investigations resolved since tags went live (`since`) count as untagged: earlier ones never had the popup."""
+def tag_counts(rows: list[dict], since=None, types=frozenset()) -> list[dict]:
+    """Tickets per tag over resolved investigations, then how many were resolved without one. An untagged resolve
+    counts only if the popup was offered: resolved since tags went live (`since`), on a ticket type with tags (`types`)."""
     counts: Counter = Counter()
     untagged = 0
     for row in rows:
@@ -355,7 +355,12 @@ def tag_counts(rows: list[dict], since=None) -> list[dict]:
             continue
         if row["tag_list"]:
             counts.update(row["tag_list"])
-        elif since and row.get("investigation_resolved_on") and row["investigation_resolved_on"] >= since:
+        elif (
+            since
+            and row["ticket_type"] in types
+            and row.get("investigation_resolved_on")
+            and row["investigation_resolved_on"] >= since
+        ):
             untagged += 1
     out = [{"tag": tag, "count": n} for tag, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
     if untagged:
@@ -465,7 +470,7 @@ def build_complaints_report(filters: dict | None = None) -> dict:
         },
         "by_type": by_type,
         "totals": total,
-        "by_tag": tag_counts(rows, tags_since()),
+        "by_tag": tag_counts(rows, tags_since(), tagged_types()),
         "tag_note": _(
             "Counts only tickets whose Investigation Status is Resolved. A ticket with several tags is counted under each tag."
         ),

@@ -15,27 +15,10 @@
           )
         }}
       </p>
-      <div v-if="!options.data && !options.error" class="flex justify-center py-4">
-        <LoadingIndicator class="w-4" />
-      </div>
-      <ErrorMessage
-        v-else-if="!options.data"
-        :message="
-          __(
-            'Couldn\'t load the tags. Skip for now and add them later in the ticket\'s Details tab.'
-          )
-        "
-      />
-      <p v-else-if="!choices.length" class="text-p-sm text-ink-gray-5">
-        {{
-          __(
-            "No tags to pick. Ask an admin or manager to add or enable tags in Settings > Ticket Tags."
-          )
-        }}
-      </p>
-      <div v-else class="flex flex-wrap gap-2">
+      <!-- askForTags opens this only with the ticket type's tags in hand, so there is no loading or empty state -->
+      <div class="flex flex-wrap gap-2">
         <button
-          v-for="tag in choices"
+          v-for="tag in tagPrompt.choices"
           :key="tag.name"
           type="button"
           :aria-pressed="selected.includes(tag.name)"
@@ -72,31 +55,15 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import {
-  Button,
-  call,
-  createResource,
-  Dialog,
-  ErrorMessage,
-  LoadingIndicator,
-  toast,
-} from "frappe-ui";
+import { Button, call, Dialog, ErrorMessage, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import LucideTag from "~icons/lucide/tag";
-import { pickableTags, tagPrompt, type TagOption } from "./ticketTags";
+import { tagPrompt } from "./ticketTags";
 
 const selected = ref<string[]>([]);
 const saving = ref(false);
 const error = ref("");
-
-// no `cache` key: this dialog mounts first (AgentRoot), and a cached resource created without `auto`
-// would stop TicketDetailsTab's auto-loading "InternalSlaOptions" from ever fetching
-const options = createResource({ url: "helpdesk.api.internal_sla.get_options" });
-
-const choices = computed(() =>
-  pickableTags((options.data?.tags || []) as TagOption[], tagPrompt.tags)
-);
 
 const changed = computed(
   () => [...selected.value].sort().join("\n") !== [...tagPrompt.tags].sort().join("\n")
@@ -108,7 +75,6 @@ watch(
   () => {
     selected.value = [...tagPrompt.tags];
     error.value = "";
-    options.reload(); // an admin may have added tags since the page loaded
   }
 );
 

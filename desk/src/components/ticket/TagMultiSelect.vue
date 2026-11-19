@@ -69,10 +69,13 @@ import { computed, ref, watch } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideTag from "~icons/lucide/tag";
-import { pickableTags, type TagOption } from "./ticketTags";
+
+// options: what the dropdown lists, already chosen by the caller (the Details tab passes the ticket type's tags plus
+// the ticket's own); `enabled: 0` marks one that can be removed but not added
+type Choice = { name: string; enabled: 0 | 1 };
 
 const props = withDefaults(
-  defineProps<{ modelValue: string[]; options: TagOption[]; label?: string; placeholder?: string }>(),
+  defineProps<{ modelValue: string[]; options: Choice[]; label?: string; placeholder?: string }>(),
   { label: "", placeholder: "" }
 );
 // change: once, when the dropdown closes, so one ticket save however many tags were toggled
@@ -89,11 +92,11 @@ const triggerLabel = computed(() =>
 );
 
 const choices = computed(() => {
-  const list = pickableTags(props.options, props.modelValue);
-  const known = new Set(list.map((tag) => tag.name));
-  // the ticket's own tags stay listed, unmarked, until the options load
-  for (const tag of props.modelValue) {
-    if (!known.has(tag)) list.push({ name: tag, enabled: 1 });
+  const list: Choice[] = [...props.options];
+  const known = new Set(list.map((choice) => choice.name));
+  // the current values stay listed, unmarked, until the options load
+  for (const value of props.modelValue) {
+    if (!known.has(value)) list.push({ name: value, enabled: 1 });
   }
   return list;
 });

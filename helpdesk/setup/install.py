@@ -72,7 +72,10 @@ def add_default_ticket_tags():
     # only into an empty list: once an admin has tags, they own the list
     if frappe.db.count("HD Ticket Tag"):
         return
-    frappe.get_doc({"doctype": "HD Ticket Tag", "tag": "Personal Preferences"}).insert(ignore_permissions=True)
+    # no ticket types yet (they're mandatory for tags people add): until an admin picks them it is offered nowhere
+    frappe.get_doc({"doctype": "HD Ticket Tag", "tag": "Personal Preferences"}).insert(
+        ignore_permissions=True, ignore_mandatory=True
+    )
 
 
 def add_internal_sla_defaults():

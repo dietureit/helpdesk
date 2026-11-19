@@ -28,6 +28,7 @@ from helpdesk.helpdesk.doctype.hd_settings.helpers import (
 from helpdesk.helpdesk.doctype.hd_ticket_activity.hd_ticket_activity import (
     log_ticket_activity,
 )
+from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import tags_offered_on
 from helpdesk.helpdesk.utils.email import (
     default_outgoing_email_account,
     default_ticket_outgoing_email_account,
@@ -99,7 +100,8 @@ class HDTicket(Document):
 
     def validate_investigation_tags(self):
         """Only agents tag, and only saved tickets: split tickets deep-copy their parent and portal input isn't trusted.
-        A newly added tag must be enabled; a tag the ticket already has stays after it is disabled."""
+        A newly added tag must be enabled and linked to the ticket's type. A tag the ticket already has stays after it
+        is disabled or unlinked, or the ticket's type changes."""
         if not self.meta.has_field("investigation_tags"):  # code deployed before migrate
             return
         if self.is_new():
@@ -127,6 +129,19 @@ class HDTicket(Document):
                     _(
                         "Tags {0} are disabled and can't be added. Remove them, or ask an admin to enable them in Settings > Ticket Tags."
                     ).format(frappe.bold(", ".join(disabled)))
+                )
+            offered = tags_offered_on(self.ticket_type, added)
+            if other := [tag for tag in added if tag not in offered]:
+                if len(other) == 1:
+                    frappe.throw(
+                        _(
+                            "Tag {0} isn't set up for ticket type {1}. Remove it, or ask an admin to add the ticket type to the tag."
+                        ).format(frappe.bold(other[0]), frappe.bold(self.ticket_type))
+                    )
+                frappe.throw(
+                    _(
+                        "Tags {0} aren't set up for ticket type {1}. Remove them, or ask an admin to add the ticket type to these tags."
+                    ).format(frappe.bold(", ".join(other)), frappe.bold(self.ticket_type))
                 )
         if tags != [row.tag for row in self.get("investigation_tags") or []]:
             self.set("investigation_tags", [{"tag": tag} for tag in tags])

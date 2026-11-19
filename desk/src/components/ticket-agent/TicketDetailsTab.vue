@@ -80,13 +80,16 @@
                 (val: string) => handleFieldUpdate('investigation_status', val, true)
               "
             />
-            <div v-if="field.fieldname === 'status'" class="mt-3 flex flex-col gap-1.5">
+            <div
+              v-if="field.fieldname === 'status' && showTagField"
+              class="mt-3 flex flex-col gap-1.5"
+            >
               <span class="form-control-label text-xs">{{ __("Investigation Tags") }}</span>
               <!-- keyed by ticket: moving to another ticket drops an open draft instead of saving it there -->
               <TagMultiSelect
                 :key="ticket.doc?.name"
                 :model-value="investigationTags"
-                :options="internalSlaOptions.data?.tags || []"
+                :options="pickableTags(tagOptions, ticket.doc?.ticket_type, investigationTags)"
                 :label="__('Investigation Tags')"
                 :placeholder="__('Select tags')"
                 @open="internalSlaOptions.reload()"
@@ -165,7 +168,14 @@ import { computed, inject, ref, watch } from "vue";
 import { createResource, FormControl } from "frappe-ui";
 import TicketField from "../TicketField.vue";
 import TagMultiSelect from "../ticket/TagMultiSelect.vue";
-import { askForTags, queueTicketSave, tagsOf } from "../ticket/ticketTags";
+import {
+  askForTags,
+  pickableTags,
+  queueTicketSave,
+  tagsForType,
+  tagsOf,
+  type TagOption,
+} from "../ticket/ticketTags";
 import AssignTo from "./AssignTo.vue";
 import TicketContact from "./TicketContact.vue";
 
@@ -230,6 +240,14 @@ const showTierPicker = computed(
 const NONE = "__none__";
 
 const investigationTags = computed(() => tagsOf(ticket.value.doc?.investigation_tags));
+const tagOptions = computed<TagOption[]>(() => internalSlaOptions.data?.tags || []);
+// only where the ticket's type has tags, or the ticket already has some (left from another type or an unlinked
+// tag), so they can still be seen and removed
+const showTagField = computed(
+  () =>
+    tagsForType(tagOptions.value, ticket.value.doc?.ticket_type).length > 0 ||
+    investigationTags.value.length > 0
+);
 
 function saveInvestigationTags(tags: string[]) {
   queueTicketSave(
@@ -247,7 +265,7 @@ function saveInvestigationTags(tags: string[]) {
 
 // `doc` is the ticket the Resolve was saved on: by the time the save returns the agent may be on another ticket
 function askTagsAfterResolve(doc: typeof ticket.value) {
-  askForTags(doc.doc.name, tagsOf(doc.doc.investigation_tags), () => {
+  askForTags(doc.doc.name, doc.doc.ticket_type, tagsOf(doc.doc.investigation_tags), () => {
     doc.reload();
     activities.value.reload();
   });

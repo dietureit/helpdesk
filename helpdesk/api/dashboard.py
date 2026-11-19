@@ -13,6 +13,7 @@ from helpdesk.helpdesk.doctype.hd_internal_sla_settings.hd_internal_sla_settings
 from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import (
     TAG_TABLE,
     TICKET_FIELD as TAG_FIELD,
+    tagged_types,
     tags_enabled,
     tags_since,
 )
@@ -1154,8 +1155,10 @@ def get_group_tag_rows(period: str, from_date, to_date=None) -> list[dict[str, a
     conditions = "t.creation >= %(from_date)s AND t.investigation_status = 'Resolved'"
     if to_date:
         conditions += " AND t.creation < %(to_date)s"
-    # an untagged resolve from before tags went live never had the popup, so it isn't "without tags"
-    conditions += " AND (tt.tag IS NOT NULL OR t.investigation_resolved_on >= %(since)s)"
+    # an untagged resolve counts only if the popup was offered: resolved since tags went live, on a type with tags
+    types = tuple(tagged_types())
+    untagged = " OR (t.investigation_resolved_on >= %(since)s AND t.ticket_type IN %(types)s)" if types else ""
+    conditions += f" AND (tt.tag IS NOT NULL{untagged})"
     rows = frappe.db.sql(
         f"""
         SELECT DATE_FORMAT(t.creation, '{fmt}') AS month, tt.tag, COUNT(DISTINCT t.name) AS count
@@ -1166,7 +1169,7 @@ def get_group_tag_rows(period: str, from_date, to_date=None) -> list[dict[str, a
         GROUP BY month, tt.tag
         """,
         # parent is text and ticket names are numbers: the CAST keeps the comparison on the parent index
-        {"from_date": from_date, "to_date": to_date, "since": tags_since()},
+        {"from_date": from_date, "to_date": to_date, "since": tags_since(), "types": types},
         as_dict=True,
     )
     # newest period first; inside it the most used tags, then the untagged resolves

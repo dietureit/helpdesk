@@ -261,10 +261,11 @@ function handleTableRowClick(row: string) {
   });
 }
 
-// Update ticket field function
+// Update ticket field function. Returns the saved ticket, or null when the save failed.
 async function updateTicketField(ticketId: string, field: string, value: string) {
+  let doc;
   try {
-    await call("frappe.client.set_value", {
+    doc = await call("frappe.client.set_value", {
       doctype: "HD Ticket",
       name: ticketId,
       fieldname: field,
@@ -272,7 +273,7 @@ async function updateTicketField(ticketId: string, field: string, value: string)
     });
   } catch (error: any) {
     toast.error(error.message || "Failed to update");
-    return false;
+    return null;
   }
   toast.success("Updated successfully");
   // the save went through even if this refresh fails; the list catches up on its next load
@@ -283,7 +284,7 @@ async function updateTicketField(ticketId: string, field: string, value: string)
       await listViewRef.value?.reload(false);
     }
   } catch {}
-  return true;
+  return doc;
 }
 
 const defaultFilters = reactive<Record<string, any>>({});
@@ -724,14 +725,17 @@ function handleCardStatus(ticketId: string, value: string) {
 }
 
 async function handleCardInvestigationStatus(ticketId: string, value: string) {
-  const rowOf = () =>
-    (cardViewResource.data?.data || []).find((r: any) => String(r.name) === String(ticketId));
-  if ((rowOf()?.investigation_status || "") === value) return;
+  const row = (cardViewResource.data?.data || []).find(
+    (r: any) => String(r.name) === String(ticketId)
+  );
+  if ((row?.investigation_status || "") === value) return;
   const saved = await updateTicketField(ticketId, "investigation_status", value);
-  // ask only after the Resolve saved, so the dialog can never block or undo it; the row is the reloaded one,
-  // so the dialog starts from the ticket's current tags
+  // ask only after the Resolve saved, so the dialog can never block or undo it. Type and tags come from the saved
+  // ticket: a list filtered on Investigation Status = Open no longer has its row after the reload.
   if (saved && value === "Resolved" && !isCustomerPortal.value) {
-    askForTags(ticketId, tagsOf(rowOf()?.investigation_tags), () => cardViewResource.reload());
+    askForTags(ticketId, saved.ticket_type, tagsOf(saved.investigation_tags), () =>
+      cardViewResource.reload()
+    );
   }
 }
 

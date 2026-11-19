@@ -226,7 +226,7 @@ const investigationDropdown = computed(() => {
             activities.value.reload();
             // ask only after the Resolve saved, so the dialog can never block or undo it
             if (next === "Resolved") {
-              askForTags(doc.doc.name, tagsOf(doc.doc.investigation_tags), () => {
+              askForTags(doc.doc.name, doc.doc.ticket_type, tagsOf(doc.doc.investigation_tags), () => {
                 doc.reload();
                 activities.value.reload();
               });
