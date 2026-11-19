@@ -11,11 +11,12 @@ from helpdesk.api.complaints import tag_counts
 from helpdesk.api.dashboard import get_group_tag_rows
 from helpdesk.api.ticket import build_card_filters
 from helpdesk.helpdesk.doctype.hd_ticket_tag.hd_ticket_tag import (
-    add_tag,
-    set_tag_enabled,
+    save_tags,
+    tag_options,
+    tagged_types,
     tags_by_ticket,
 )
-from helpdesk.test_utils import make_ticket
+from helpdesk.test_utils import make_ticket as _make_ticket
 
 ROW_MODULE = "helpdesk.helpdesk.doctype.hd_ticket_investigation_tag.hd_ticket_investigation_tag"
 UNTAGGED = "Resolved without tags"
@@ -23,12 +24,31 @@ TAG = "QA Tag Found"
 TAG_LONGER = "QA Tag Found Twice"  # contains TAG: an exact filter must not match it
 ARABIC = "لا توجد مشكلة"  # "no problem found"
 DISABLED = "QA Tag Retired"
+# throwaway ticket types, so results don't depend on how the site links its tags
+QA_TYPE = "QA Tag Type"  # the test tags are linked to it
+OTHER_TYPE = "QA Tag Other Type"  # no tags
 
 
-def make_tag(tag: str, enabled: int = 1):
-    frappe.get_doc({"doctype": "HD Ticket Tag", "tag": tag, "enabled": enabled}).insert(
-        ignore_if_duplicate=True
-    )
+def make_ticket(**args):
+    return _make_ticket(**{"ticket_type": QA_TYPE, **args})
+
+
+def make_tag(tag: str, enabled: int = 1, types=(QA_TYPE,)):
+    # the tests share one transaction (FrappeTestCase rolls back after the class): don't add its type rows twice
+    if frappe.db.exists("HD Ticket Tag", tag):
+        return
+    frappe.get_doc(
+        {
+            "doctype": "HD Ticket Tag",
+            "tag": tag,
+            "enabled": enabled,
+            "ticket_types": [{"ticket_type": ticket_type} for ticket_type in types],
+        }
+    ).insert(ignore_mandatory=not types)  # no types: a tag from before they were mandatory
+
+
+def types_of(tag: str) -> list[str]:
+    return [row.ticket_type for row in frappe.get_doc("HD Ticket Tag", tag).ticket_types]
 
 
 def tags_of(ticket) -> list[str]:
@@ -48,6 +68,8 @@ class TestHDTicketTag(FrappeTestCase):
         mute = frappe.flags.mute_emails
         frappe.flags.mute_emails = True
         self.addCleanup(setattr, frappe.flags, "mute_emails", mute)
+        for ticket_type in (QA_TYPE, OTHER_TYPE):
+            frappe.get_doc({"doctype": "HD Ticket Type", "name": ticket_type}).insert(ignore_if_duplicate=True)
         for tag in (TAG, TAG_LONGER, ARABIC):
             make_tag(tag)
         make_tag(DISABLED, enabled=0)
@@ -96,6 +118,47 @@ class TestHDTicketTag(FrappeTestCase):
         self.addCleanup(frappe.db.set_value, "HD Ticket Tag", TAG, "enabled", 1)
         self.tag(ticket, TAG, ARABIC)  # TAG was already there: kept
         self.assertEqual(tags_of(ticket), [TAG, ARABIC])
+
+    def test_tags_are_offered_only_on_their_ticket_types(self):
+        self.assertRaises(
+            frappe.ValidationError, self.tag, make_ticket(subject="QA tags other", ticket_type=OTHER_TYPE), TAG
+        )
+        # a tag the ticket already has stays when its type changes, but none can be added for the new type
+        ticket = self.tag(make_ticket(subject="QA tags type change"), TAG)
+        ticket.ticket_type = OTHER_TYPE
+        ticket.save(ignore_permissions=True)
+        self.assertRaises(frappe.ValidationError, self.tag, ticket, TAG, ARABIC)
+        self.tag(ticket, TAG)
+        self.assertEqual(tags_of(ticket), [TAG])
+
+    def test_tag_options_list_ticket_types(self):
+        make_tag("QA Tag Off", enabled=0, types=(OTHER_TYPE,))
+        make_tag("QA Tag Untyped", types=())
+        types = {tag.name: tag.ticket_types for tag in tag_options()}
+        self.assertEqual(types[TAG], [QA_TYPE])
+        self.assertEqual(types["QA Tag Off"], [OTHER_TYPE])
+        self.assertEqual(types["QA Tag Untyped"], [])
+        # a type whose only tag is disabled gets no popup, like a type without tags
+        self.assertIn(QA_TYPE, tagged_types())
+        self.assertNotIn(OTHER_TYPE, tagged_types())
+
+    def test_only_enabled_ticket_types_can_be_linked(self):
+        for ticket_type in (QA_TYPE, OTHER_TYPE):
+            frappe.db.set_value("HD Ticket Type", ticket_type, "enabled", 0)
+            self.addCleanup(frappe.db.set_value, "HD Ticket Type", ticket_type, "enabled", 1)
+        self.assertRaises(frappe.ValidationError, make_tag, "QA Tag Disabled Type", types=(OTHER_TYPE,))
+        self.assertRaises(
+            frappe.ValidationError, save_tags, [{"name": TAG, "ticket_types": [QA_TYPE, OTHER_TYPE]}]
+        )
+        # QA_TYPE was linked before it was disabled: it stays linked, and the tag can still be saved
+        save_tags([{"name": TAG, "enabled": 0, "ticket_types": [QA_TYPE]}])
+        self.addCleanup(frappe.db.set_value, "HD Ticket Tag", TAG, "enabled", 1)
+        self.assertEqual(
+            frappe.get_all(
+                "HD Ticket Tag Ticket Type", filters={"parent": TAG}, pluck="ticket_type"
+            ),
+            [QA_TYPE],
+        )
 
     def test_non_agents_cannot_change_tags(self):
         ticket = make_ticket(subject="QA tags customer")
@@ -159,12 +222,42 @@ class TestHDTicketTag(FrappeTestCase):
         # the tab shows for admins and dashboard managers (e.g. Messenger Manager), who have no rights on the doctype
         manager = patch("helpdesk.api.internal_sla.is_dashboard_manager", return_value=True)
         with manager, patch("frappe.get_roles", return_value=["Messenger Manager"]):
-            add_tag("QA Tag Added")
-            set_tag_enabled("QA Tag Added", 0)
+            save_tags([{"name": "QA Tag Added", "is_new": 1, "enabled": 1, "ticket_types": [QA_TYPE]}])
+            save_tags([{"name": "QA Tag Added", "enabled": 0, "ticket_types": [OTHER_TYPE]}])
         self.assertEqual(frappe.db.get_value("HD Ticket Tag", "QA Tag Added", "enabled"), 0)
+        self.assertEqual(types_of("QA Tag Added"), [OTHER_TYPE])
         agent = patch("helpdesk.api.internal_sla.is_dashboard_manager", return_value=False)
         with agent, patch("frappe.get_roles", return_value=["Agent"]):
-            self.assertRaises(frappe.PermissionError, add_tag, "QA Tag Refused")
+            self.assertRaises(
+                frappe.PermissionError,
+                save_tags,
+                [{"name": "QA Tag Refused", "is_new": 1, "enabled": 1, "ticket_types": [QA_TYPE]}],
+            )
+
+    def test_ticket_types_are_mandatory(self):
+        new = {"name": "QA Tag No Types", "is_new": 1, "enabled": 1}
+        self.assertRaises(frappe.MandatoryError, save_tags, [new])
+        self.assertRaises(frappe.MandatoryError, save_tags, [{**new, "ticket_types": []}])
+        save_tags([{**new, "name": "QA Tag Typed", "ticket_types": [QA_TYPE, QA_TYPE]}])
+        self.assertEqual(types_of("QA Tag Typed"), [QA_TYPE])  # listed once
+        typed = {"name": "QA Tag Typed", "enabled": 1}
+        self.assertRaises(frappe.MandatoryError, save_tags, [{**typed, "ticket_types": []}])
+        self.assertEqual(types_of("QA Tag Typed"), [QA_TYPE])
+        # a tag from before types were mandatory (or the starter tag) can still be switched off and on
+        make_tag("QA Tag Legacy", types=())
+        save_tags([{"name": "QA Tag Legacy", "enabled": 0, "ticket_types": []}])
+        self.assertEqual(frappe.db.get_value("HD Ticket Tag", "QA Tag Legacy", "enabled"), 0)
+        # only the fields sent change: another admin's edit to the other one survives
+        save_tags([{"name": "QA Tag Typed", "enabled": 0}])
+        self.assertEqual(types_of("QA Tag Typed"), [QA_TYPE])
+        save_tags([{"name": "QA Tag Typed", "ticket_types": [OTHER_TYPE]}])
+        self.assertEqual(frappe.db.get_value("HD Ticket Tag", "QA Tag Typed", "enabled"), 0)
+        self.assertEqual(types_of("QA Tag Typed"), [OTHER_TYPE])
+        save_tags([{"name": "QA Tag Typed", "enabled": 1, "ticket_types": [QA_TYPE]}])
+        # rows that didn't change aren't saved again
+        modified = frappe.db.get_value("HD Ticket Tag", "QA Tag Typed", "modified")
+        save_tags([{**typed, "ticket_types": [QA_TYPE]}])
+        self.assertEqual(frappe.db.get_value("HD Ticket Tag", "QA Tag Typed", "modified"), modified)
 
     def test_duplicate_rows_are_listed_once(self):
         # a Desk rename with "merge" can leave a ticket with the same tag twice until its next save
@@ -205,6 +298,8 @@ class TestHDTicketTag(FrappeTestCase):
         before_tags = make_ticket(subject="QA tags before")
         self.resolve(before_tags)
         frappe.db.set_value("HD Ticket", before_tags.name, "investigation_resolved_on", "2000-01-01")
+        # its type has no tags, so it never had the popup either
+        self.resolve(make_ticket(subject="QA tags no popup", ticket_type=OTHER_TYPE))
         still_open = self.tag(make_ticket(subject="QA tags open"), TAG)
 
         self.assertEqual(
@@ -213,19 +308,24 @@ class TestHDTicketTag(FrappeTestCase):
         )
         counts = {row["tag"]: row["count"] for row in get_group_tag_rows("monthly", start)}
         self.assertEqual(counts, {TAG: 1, ARABIC: 1, UNTAGGED: 1})
+        with patch("helpdesk.api.dashboard.tagged_types", return_value=set()):
+            counts = {row["tag"]: row["count"] for row in get_group_tag_rows("monthly", start)}
+        self.assertEqual(counts, {TAG: 1, ARABIC: 1})
 
     def test_complaints_tag_counts(self):
         since = now_datetime()
         after, before = add_to_date(since, hours=1), add_to_date(since, hours=-1)
+        resolved = {"investigation_status": "Resolved", "ticket_type": QA_TYPE}
         rows = [
-            {"investigation_status": "Resolved", "tag_list": [TAG, ARABIC]},
-            {"investigation_status": "Resolved", "tag_list": [TAG]},
-            {"investigation_status": "Resolved", "tag_list": [], "investigation_resolved_on": after},
-            {"investigation_status": "Resolved", "tag_list": [], "investigation_resolved_on": before},
-            {"investigation_status": "Open", "tag_list": [ARABIC]},
+            {**resolved, "tag_list": [TAG, ARABIC]},
+            {**resolved, "tag_list": [TAG]},
+            {**resolved, "tag_list": [], "investigation_resolved_on": after},
+            {**resolved, "tag_list": [], "investigation_resolved_on": before},
+            {**resolved, "tag_list": [], "investigation_resolved_on": after, "ticket_type": OTHER_TYPE},
+            {"investigation_status": "Open", "ticket_type": QA_TYPE, "tag_list": [ARABIC]},
         ]
         self.assertEqual(
-            tag_counts(rows, since),
+            tag_counts(rows, since, {QA_TYPE}),
             [
                 {"tag": TAG, "count": 2},
                 {"tag": ARABIC, "count": 1},

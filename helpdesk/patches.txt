@@ -7,6 +7,8 @@ execute:frappe.delete_doc("DocType", "HD Preset Filter")
 execute:frappe.delete_doc("DocType", "HD Preset Filter Item")
 execute:frappe.delete_doc("DocType", "HD Pause Service Level Agreement On Status")
 execute:frappe.delete_doc("DocType", "HD Service Level Agreement Fulfilled On Status")
+# before HD Ticket Tag gets its ticket_types field: once the field exists, tag_options() reads this child table
+execute:frappe.reload_doc("helpdesk", "doctype", "hd_ticket_tag_ticket_type")
 # before HD Ticket gets its investigation_tags field: model sync imports doctypes in directory order
 execute:frappe.reload_doc("helpdesk", "doctype", "hd_ticket_tag")
 execute:frappe.reload_doc("helpdesk", "doctype", "hd_ticket_investigation_tag")

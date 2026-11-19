@@ -3,12 +3,13 @@
  "allow_rename": 1,
  "autoname": "field:tag",
  "creation": "2026-11-18 18:00:00.000000",
- "description": "What an investigation found, e.g. \"No issues\". Disable a tag instead of deleting it: tickets keep it and reports keep counting it.",
+ "description": "What an investigation found, e.g. \"No issues\". It is offered only on tickets of its ticket types. Disable a tag instead of deleting it: tickets keep it and reports keep counting it.",
  "doctype": "DocType",
  "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
   "tag",
+  "ticket_types",
   "enabled"
  ],
  "fields": [
@@ -21,6 +22,14 @@
    "unique": 1
   },
   {
+   "description": "Required. The tag is offered only on tickets of these types.",
+   "fieldname": "ticket_types",
+   "fieldtype": "Table MultiSelect",
+   "label": "Ticket Types",
+   "options": "HD Ticket Tag Ticket Type",
+   "reqd": 1
+  },
+  {
    "default": "1",
    "fieldname": "enabled",
    "fieldtype": "Check",
@@ -29,7 +38,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-18 18:00:00.000000",
+ "modified": "2026-11-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Ticket Tag",

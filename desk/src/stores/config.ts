@@ -42,6 +42,11 @@ export const useConfigStore = defineStore("config", () => {
     ])
       getCachedResource(key)?.reload();
   });
+  // An HD Ticket Tag changed (its ticket types, Enabled, ...): the Details tab decides from this list whether a
+  // ticket shows Investigation Tags at all.
+  socket.on("helpdesk:ticket-tags-updated", () =>
+    getCachedResource("InternalSlaOptions")?.reload()
+  );
 
   return {
     configResource,
